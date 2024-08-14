@@ -1,40 +1,50 @@
-// pages/reset-password.js
 import { useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { useRouter } from 'next/router';
+import { createClient } from '../lib/supabase/component';
 
-const ResetPassword = () => {
+export default function ForgotPassword() {
   const [email, setEmail] = useState('');
-  const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const router = useRouter();
+  const supabase = createClient();
 
   const handleResetPassword = async () => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
-
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: 'https://nodetest.crossmedia.fi/update-password',
+    })
     if (error) {
       console.error('Error resetting password:', error.message);
-      setError(error.message);
-    } else {
-      setMessage('Check your email for the password reset link.');
-      // setTimeout(() => router.push('/login'), 2000);
     }
-  };
+  }
 
   return (
-    <div>
-      <h1>Reset Password</h1>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {message && <p style={{ color: 'green' }}>{message}</p>}
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="Email"
-      />
-      <button onClick={handleResetPassword}>Send Password Reset Email</button>
+    <div className="flex min-h-screen items-center justify-center bg-gray-100">
+      <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
+        <h2 className="text-2xl font-semibold text-center mb-6">Forgot password?</h2>
+          <div className="space-y-4">
+            <div className="form-group">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                placeholder="Enter your email address"
+                required
+              />
+            </div>
+            <button
+              type="button"
+              className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700"
+              onClick={() => handleResetPassword()}
+            >
+                Send reset link
+            </button>
+          </div>
+        <div className="text-center mt-6">
+          <a href="/login" className="text-indigo-600 hover:text-indigo-700">Back to login</a>
+        </div>
+      </div>
     </div>
   );
-};
-
-export default ResetPassword;
+}

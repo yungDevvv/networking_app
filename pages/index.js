@@ -1,21 +1,27 @@
+
 // pages/index.js
-import { useUser } from '../context/UserContext';
-import withAuth from '../lib/withAuth';
+import { useEffect, useState } from "react";
+import { checkAuth } from '../lib/check-auth';
+// export const getServerSideProps = async (ctx) => {
+//   return await checkAuth(ctx);
+// };
 
 const Home = () => {
-  const user = useUser();
+  // const user = useUser();
   
-  if (!user) {
-    return <p>Loading...</p>;
-  }
+  // if (!user) {
+  //   return <p>Loading...</p>;
+  // }
+
+  console.log("HOME")
+  const [user, setUser] = useState(null);
 
   return (
     <div>
       <h1>Home Page</h1>
-      <p>Welcome, {user.email}!</p>
       <a href="/logout">Logout</a>
     </div>
   );
 };
 
-export default withAuth(Home);
+export default Home;

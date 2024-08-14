@@ -1,10 +1,8 @@
 // components/Navbar.js
 import Link from 'next/link';
-import { useUser } from '../context/UserContext'; // Используем контекст для доступа к пользователю
 
 const Navbar = () => {
-  const user = useUser();
-
+  let user = true;
   return (
     <nav>
       <ul>
@@ -14,7 +12,7 @@ const Navbar = () => {
         {user ? (
           <>
             <li>
-              <Link href="/profilePage">Profile</Link>
+              <Link href="/profile">Profile</Link>
             </li>
             <li>
               <Link href="/logout">Logout</Link>

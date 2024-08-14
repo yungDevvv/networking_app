@@ -1,20 +1,21 @@
 // pages/_app.js
+import '../styles/globals.css'
 import { useRouter } from 'next/router';
 import Navbar from '../components/NavBar';
-import { UserProvider } from '../context/UserContext';
+
 
 function MyApp({ Component, pageProps }) {
   const router = useRouter();
   const { pathname } = router;
 
   // Скрываем Navbar на страницах логина и регистрации
-  const showNavbar = !['/login', '/register'].includes(pathname);
+  const showNavbar = !['/login', '/register', '/reset-password', '/update-password'].includes(pathname);
 
   return (
-    <UserProvider>
-      {showNavbar && <Navbar />}
-      <Component {...pageProps} />
-    </UserProvider>
+      <div>
+         {showNavbar && <Navbar />}
+         <Component {...pageProps} />
+      </div>
   );
 }
 
