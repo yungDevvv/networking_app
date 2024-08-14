@@ -1,12 +1,13 @@
 // pages/api/session.js
-import { supabase } from '../../lib/supabase';
+import { createClient } from '../../lib/supabase/server-props';
 
-export default async function handler(req, res) {
+export default async function handler(ctx) {
+  const supabase = createClient(ctx);
   const { data: { session }, error } = await supabase.auth.getSession();
 
   if (error) {
-    return res.status(500).json({ error: error.message });
+    return ctx.res.status(500).json({ error: error.message });
   }
 
-  res.status(200).json({ session });
+  ctx.res.status(200).json({ session });
 }

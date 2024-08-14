@@ -65,7 +65,8 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: 'https://arzprbxlhvfnbwpztmpo.supabase.co/auth/v1/callback',
+        // redirectTo: 'https://arzprbxlhvfnbwpztmpo.supabase.co/auth/v1/callback',
+        redirectTo: 'http://nodetest.crossmedia.fi/',
       },
     });
     if (error) {
