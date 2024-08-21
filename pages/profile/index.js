@@ -1,6 +1,6 @@
 // pages/profilePage/index.js
 import { checkAuth } from '../../lib/check-auth';
-import { createClient } from '../../lib/supabase/server-props';
+import axios from 'axios';
 
 export const getServerSideProps = async (ctx) => {
   return await checkAuth(ctx);
@@ -8,7 +8,8 @@ export const getServerSideProps = async (ctx) => {
 
 import { useState } from 'react';
 
-export default function ProfilePage() {
+export default function ProfilePage({user}) {
+  console.log(user)
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -21,7 +22,6 @@ export default function ProfilePage() {
     searching: '',
     offering: '',
     notice: '',
-    profileImage: null,
   });
 
   const handleChange = (e) => {
@@ -29,23 +29,23 @@ export default function ProfilePage() {
     setFormData((prevData) => ({ ...prevData, [name]: value }));
   };
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setFormData((prevData) => ({ ...prevData, profileImage: URL.createObjectURL(file) }));
-    }
-  };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Здесь будет ваша логика для сохранения профиля
-    console.log('Profile data:', formData);
+  const handleSubmit = async (e) => {
+    try {
+      const response = await axios.post('/api/update-profile', {
+        ...formData,
+        user_id: user.id,
+      });
+      alert(response.data.message);
+    } catch (err) {
+      console.error(err.message)
+    }
   };
 
   return (
     <div className="container mx-auto my-4 p-4 bg-white border border-black shadow-xl rounded-lg">
       <h2 className="text-2xl font-semibold mb-6">Perustiedot</h2>
-      <div onSubmit={handleSubmit} className="space-y-6">
+      <div className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="form-group">
             <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">Etunimi</label>
@@ -178,30 +178,12 @@ export default function ProfilePage() {
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             />
           </div>
-          <div className="col-span-2">
-            <label htmlFor="fileinput" className="block text-sm font-medium text-gray-700">Kuva</label>
-            <input
-              id="fileinput"
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="mt-1 block w-full text-sm text-gray-500 file:py-2 file:px-4 file:border file:rounded-md file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-            />
-            {formData.profileImage && (
-              <div className="mt-4">
-                <img
-                  src={formData.profileImage}
-                  alt="Profile Preview"
-                  className="w-full h-auto rounded-lg"
-                />
-              </div>
-            )}
-          </div>
         </div>
         <div className="flex justify-between mt-6">
           <button
             type="button"
             className="bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700"
+            onClick={() => handleSubmit()}
           >
             Tallenna
           </button>

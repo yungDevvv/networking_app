@@ -1,55 +1,3 @@
-// import { useRouter } from 'next/router'
-// import { useState } from 'react'
-// import { createClient } from '../lib/supabase/component'
-
-
-
-// export default function LoginPage() {
-//   const router = useRouter()
-//   const supabase = createClient()
-
-//   const [email, setEmail] = useState('')
-//   const [password, setPassword] = useState('')
-
-//   async function logIn() {
-//     const { error } = await supabase.auth.signInWithPassword({ email: "sem.m1415@mail.ru", password: "adminadmin" })
-//     if (error) {
-//       console.error(error)
-//     }
-//     router.push('/')
-//   }
-
-//   async function signUp() {
-//     const { error } = await supabase.auth.signUp({ email: "sem.m1415@mail.ru", password: "adminadmin" })
-//     if (error) {
-//       console.error(error)
-//     }
-//     // router.push('/')
-//   }
-
-//   return (
-//     <main>
-//       <htmlForm>
-//         <label htmlhtmlFor="email">Email:</label>
-//         <input id="email" type="email" value={"sem.m1415@mail.ru"} onChange={(e) => setEmail(e.target.value)} />
-//         <label htmlhtmlFor="password">Password:</label>
-//         <input
-//           id="password"
-//           type="text"
-//           value={"adminadmin"}
-//           onChange={(e) => setPassword(e.target.value)}
-//         />
-//         <button type="button" onClick={logIn}>
-//           Log in
-//         </button>
-//         <button type="button" onClick={signUp}>
-//           Sign up
-//         </button>
-//       </htmlForm>
-//     </main>
-//   )
-// }
-
 import React, { useState } from 'react';
 import { useRouter } from 'next/router';
 import { createClient } from '../lib/supabase/component'
@@ -57,6 +5,7 @@ import { createClient } from '../lib/supabase/component'
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMessage, setErrorMessage] = useState(null);
   const supabase = createClient();
   const router = useRouter();
   const { registered } = router.query;
@@ -65,11 +14,12 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        // redirectTo: 'https://arzprbxlhvfnbwpztmpo.supabase.co/auth/v1/callback',
-        redirectTo: 'http://nodetest.crossmedia.fi/',
+        redirectTo: 'http://nodetest.crossmedia.fi/api/auth/callback',
       },
     });
+    
     if (error) {
+      setErrorMessage(error.message)
       console.error('Error logging in with Google:', error.message);
     }
   };
@@ -77,6 +27,7 @@ export default function LoginPage() {
   const handleLogin = async () => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
+      setErrorMessage(error.message)
       console.error('Error logging in:', error.message);
     }
     router.push('/')
@@ -93,8 +44,15 @@ export default function LoginPage() {
         <div className="space-y-4">
           {
             registered && (
-              <p classNameName="mt-2 text-center text-sm text-green-600">
+              <p className="mt-[-20px] text-center text-sm text-green-600">
                 Registration successful! Please check your email for the confirmation link.
+              </p>
+            )
+          }
+          {
+            errorMessage && (
+              <p className="mt-[-20px] text-center text-sm text-red-600">
+                Error: {errorMessage}
               </p>
             )
           }
@@ -126,7 +84,7 @@ export default function LoginPage() {
 
           <div className="flex items-center justify-between">
             <div className="text-sm">
-              <a href="#" className="font-medium text-indigo-600 hover:text-indigo-500">Forgot your password?</a>
+              <a href="/reset-password" className="font-medium text-indigo-600 hover:text-indigo-500">Forgot your password?</a>
             </div>
           </div>
 

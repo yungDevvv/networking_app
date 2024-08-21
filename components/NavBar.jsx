@@ -9,7 +9,7 @@ const Navbar = () => {
         <li>
           <Link href="/">Home</Link>
         </li>
-        {user ? (
+        {user &&
           <>
             <li>
               <Link href="/profile">Profile</Link>
@@ -18,16 +18,7 @@ const Navbar = () => {
               <Link href="/logout">Logout</Link>
             </li>
           </>
-        ) : (
-          <>
-            <li>
-              <Link href="/login">Login</Link>
-            </li>
-            <li>
-              <Link href="/register">Register</Link>
-            </li>
-          </>
-        )}
+        }
       </ul>
     </nav>
   );
