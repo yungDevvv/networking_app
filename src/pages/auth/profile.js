@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { checkAuth } from '../../lib/check-auth';
 import { useRouter } from 'next/router';
@@ -6,24 +6,49 @@ import Link from 'next/link';
 // import { Button } from '@nextui-org/button';
 import { useTranslation } from 'next-i18next';
 import { companiesList } from '../../utils/companies_data';
-import { Settings, X } from 'lucide-react';
+import { Plus, Search, Settings, X } from 'lucide-react';
 import ProfileSettingsModal from '../../components/modals/profile-settings-modal';
+import { hashEncodeId } from '../../../hashId';
+import SearchCompanyModal from '../../components/modals/search-company-modal';
+import { getCompanies, getUserCompany } from '../../lib/companies';
+import CreateCompanyModal from '../../components/modals/create-company-modal';
+import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import LanguageSwitcher from '../../components/LanguageSwitcher';
 
 
 export const getServerSideProps = async (ctx) => {
-  return await checkAuth(ctx);
+  const { props } = await checkAuth(ctx);
+  const companies = await getCompanies();
+
+  if (!props.profile) {
+    return {
+      props: {
+        user: { ...props.user },
+        companies: [...companies.companies],
+        ...(await serverSideTranslations(ctx.locale, [
+          'common',
+        ]))
+      }
+    }
+  }
+
+  const userCompany = await getUserCompany(props.profile.id);
+
+  return { props: { ...props, ...companies, ...userCompany } }
 };
 
-export default function ProfilePage({ user, profile }) {
+export default function ProfilePage({ user, profile, companies, userCompany }) {
   const fileInputRef = useRef(null);
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
   const { t } = useTranslation('common');
+  const [searchValue, setSearchValue] = useState("")
+  const [filteredCompanies, setFilteredCompanies] = useState([]);
+
   const [formData, setFormData] = useState({
     firstName: profile?.first_name || user?.user_metadata.firstName || '',
     lastName: profile?.last_name || user?.user_metadata.lastName || '',
     emailAddress: user.email,
-    company: profile?.company || '',
+    company_name: profile?.company_name || '',
     title: profile?.title || '',
     phone: profile?.phone || '',
     address1: profile?.address1 || '',
@@ -35,8 +60,12 @@ export default function ProfilePage({ user, profile }) {
     avatar: profile?.avatar || user?.user_metadata.avatar_url || ''
   });
   const [modalOpen, setModalOpen] = useState(false);
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [selCompaniesOpen, setSelCompaniesOpen] = useState(false);
-  console.log(profile)
+  const [createCompanyModalOpen, setCreateCompanyModalOpen] = useState(false);
+  const [contentOpen, setContentOpen] = useState(false);
+
+
   const handleChange = (e) => {
     const { name, value, files } = e.target;
 
@@ -81,32 +110,51 @@ export default function ProfilePage({ user, profile }) {
   }
 
   const handleSubmit = async () => {
-    setIsLoading(true);
     try {
       const response = await axios.post('/api/update-profile', {
         ...formData,
         user_id: user.id,
       });
-      if (response.status === 200) {
+      if (response) {
         router.push('/');
       }
     } catch (err) {
       console.error(err.message);
       alert('An error occurred while saving your profile.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
+  const handleSearchChange = (e) => {
+    const term = e.target.value;
+    setSearchValue(term);
+
+    if (term) {
+      const filtered = companies.filter((company) =>
+        company.company_name.toLowerCase().includes(term.toLowerCase())
+      );
+      setFilteredCompanies(filtered);
+    } else {
+      setFilteredCompanies([]);
+    }
+  }
+
   return (
     <div className="w-full max-w-3xl bg-white p-8 rounded-lg shadow-md">
+      {!profile && (
+        <div className='flex justify-end'>
+          <LanguageSwitcher />
+        </div>
+      )}
       <h2 className="text-2xl font-semibold text-center text-gray-900 mb-2">{t("complete_profile")}</h2>
-      <div className='w-full flex justify-center mb-6'>
-        <Link href={"/profile/" + profile.id} className='text-center underline text-indigo-500'>Visit your public profile</Link>
-        <button onClick={() => setModalOpen(open => !open)} className='ml-2 hover:text-indigo-500 transition-all duration-150' title='Customize profile view'>
-          <Settings />
-        </button>
-      </div>
+      {profile && (
+        <div className='w-full flex justify-center mb-6'>
+          <Link href={"/profile/" + hashEncodeId(profile.id)} className='text-center underline text-indigo-500'>Visit your public profile</Link>
+          <button onClick={() => setModalOpen(open => !open)} className='ml-2 hover:text-indigo-500 transition-all duration-150' title='Customize profile view'>
+            <Settings />
+          </button>
+        </div>
+      )}
+
       <div className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -149,15 +197,57 @@ export default function ProfilePage({ user, profile }) {
           </div>
           <div>
             <label htmlFor="company" className="block text-sm font-medium text-gray-700">{t("company")} <span className='text-red-600'>*</span></label>
-            <input
-              id="company"
-              name="company"
-              type="text"
-              value={formData.company}
-              onChange={handleChange}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              required
-            />
+            <div className='relative'>
+              <div onClick={() => setContentOpen(open => !open)} className="select-none mt-1 block cursor-pointer w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm sm:text-sm">
+                <span className="block truncate">
+                  {formData.company_name ? formData.company_name : 'Search company'}
+                </span>
+              </div>
+              {contentOpen && (
+                <div className="absolute mt-1 w-full bg-white border border-gray-300 rounded shadow-lg z-10">
+                  <div className='relative flex items-center'>
+                    <input
+                      id="company"
+                      name="company"
+                      type="text"
+                      placeholder='Search company name'
+                      autoComplete="off"
+                      value={searchValue}
+                      onChange={handleSearchChange}
+                      className="mt-1 block w-full px-3 py-2 border-b bg-transparent text-sm border-gray-300 focus:outline-none"
+                    />
+                    {userCompany !== null
+                      ? (
+                        <button title="Edit company" onClick={() => setCreateCompanyModalOpen(open => !open)} type="button" className='absolute right-2 rounded-md hover:bg-gray-100 p-1'>
+                          <Settings size={20} className='text-indigo-400' />
+                        </button>
+                      )
+                      : (
+                        <button onClick={() => setCreateCompanyModalOpen(open => !open)} type="button" className='absolute right-2 rounded-md hover:bg-gray-100 p-1'>
+                          <Plus size={20} className='text-indigo-400' />
+                        </button>
+                      )}
+                  </div>
+                  <div className='overflow-hidden'>
+                    {filteredCompanies.length !== 0
+                      ? filteredCompanies.map(company => (
+                        <button onClick={() => {
+                          setFormData(prev => ({ ...prev, company: company.id }))
+                          setContentOpen(false);
+                          setSearchValue("");
+                          setFilteredCompanies([]);
+                        }}
+                          key={company.id}
+                          type="button"
+                          className='text-sm text-left py-2 px-3 block hover:bg-gray-100 w-full'
+                        >{company.company_name}</button>
+                      ))
+                      : <p className='select-none text-sm text-left py-2 px-3 block w-full'>No company found</p>
+                    }
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <div>
             <label htmlFor="title" className="block text-sm font-medium text-gray-700">{t("job_title")} <span className='text-red-600'>*</span></label>
@@ -240,7 +330,7 @@ export default function ProfilePage({ user, profile }) {
             </div>
 
             {selCompaniesOpen &&
-              <div className="absolute mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg z-10">
+              <div className="absolute mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg z-10 overflow-hidden">
                 {companiesList.map((company) => (
                   <label key={company.name} className="flex items-center p-2 hover:bg-gray-100 cursor-pointer">
                     <input
@@ -300,41 +390,12 @@ export default function ProfilePage({ user, profile }) {
           {profile &&
             <Link href="/" className=" text-black py-2 px-4 underline">{t("back")}</Link>
           }
-          {/* <Button
-              onClick={handleSubmit}
-              radius="sm"
-              className=' bg-indigo-600 hover:bg-indigo-700'
-              color="primary"
-              spinner={
-                <svg
-                  className="animate-spin h-5 w-5 text-current"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    fill="currentColor"
-                  />
-                </svg>
-              }
-              isLoading={isLoading}
-            >
-              {t("save")}
-            </Button> */}
           <button type="button" className="bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500" onClick={handleSubmit}>{t("save")}</button>
         </div>
       </div>
+      {searchModalOpen && <SearchCompanyModal setSearchModalOpen={setSearchModalOpen} />}
       {modalOpen && <ProfileSettingsModal setModalOpen={setModalOpen} profileId={profile.id} privacy_settings={profile.privacy_settings} />}
+      {createCompanyModalOpen && <CreateCompanyModal profileId={profile.id} setCreateCompanyModalOpen={setCreateCompanyModalOpen} userCompany={userCompany} />}
     </div>
 
   );

@@ -13,8 +13,8 @@ function MyApp({ Component, pageProps }) {
   const { pathname } = router;
   console.log(pathname)
   // const isAuthPage = !['/auth/login', '/auth/register', '/auth/reset-password', '/auth/update-password', '/auth/profile', '/profile/*'].includes(pathname);
-  const isAuthPage = !['/auth/login', '/auth/register', '/auth/reset-password', '/auth/update-password', '/auth/profile', '/profile/[id]'].includes(pathname);
-
+  const isAuthPage = !['/auth/login', '/auth/register', '/auth/reset-password', '/auth/update-password', '/auth/profile', '/profile/[hashId]'].includes(pathname);
+  
   return (
     // <NextUIProvider>
     <>
@@ -26,7 +26,6 @@ function MyApp({ Component, pageProps }) {
         <MainLayout {...pageProps}>
           <ModalProvider>
             <Component {...pageProps} />
-            {/* <AllModals {...pageProps} /> */}
             <AllModals {...pageProps} />
           </ModalProvider>
         </MainLayout>

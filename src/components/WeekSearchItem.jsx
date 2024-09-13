@@ -9,7 +9,7 @@ const WeekSearchItem = ({ weekSearch, profileId, avatar }) => {
    const [commentsOpen, setCommentsOpen] = useState(false);
    const [comments, setComments] = useState([]);
    const [commentText, setCommentText] = useState('');
-   console.log(weekSearch)
+  
    const handleSubmit = async () => {
       const res = await createWeekSearchComment(profileId, weekSearch.id, commentText);
       
@@ -40,15 +40,12 @@ const WeekSearchItem = ({ weekSearch, profileId, avatar }) => {
                   <span className="text-sm">{weekSearch.address1}</span>
                </div>
             </div>
-            <div className="ml-auto">
+            <div className="ml-auto self-start">
                <div className="flex items-center">
                   <Clock size={16} className="text-indigo-600 mr-1" />
                   <span className="text-sm text-gray-500">{formatDate(weekSearch.start_date)}</span>
                </div>
-               <div className="flex items-center">
-                  <ShieldCheck size={16} className={`mr-1 ${weekSearch.is_active ? "text-green-500" : "text-gray-600"}`} />
-                  <span className={`text-sm ${weekSearch.is_active ? "text-green-500" : "text-gray-600"}`}>{weekSearch.is_active ? "Active" : "Not active"}</span>
-               </div>
+              
             </div>
          </div>
          <hr className="border-indigo-200 my-3" />
@@ -72,7 +69,7 @@ const WeekSearchItem = ({ weekSearch, profileId, avatar }) => {
          {commentsOpen && (
             <Fragment>
                <hr className="border-indigo-200 my-3" />
-               <div className="">
+               <div className="p-3 rounded-md bg-gray-100">
                   {comments.length !== 0
                      ? comments.map(comment => <WeekSearchComment key={comment.id} comment={comment} />)
                      : <p className="mb-2 font-mono">No comments yet...</p>

@@ -1,9 +1,12 @@
 const express = require('express');
 const next = require('next');
 const mysql = require('mysql2');
+const Hashids = require('hashids/cjs');
 const dev = true;
 const app = next({ dev });
 const handle = app.getRequestHandler();
+const { hashEncodeId, hashDecodeId } = require('./hashId');
+const authenticateToken = require('./utils');
 
 app.prepare().then(() => {
   const server = express();
@@ -30,6 +33,28 @@ app.prepare().then(() => {
     connection.release();
   });
 
+
+  server.get('/profile:hashId', async (req, res) => {
+    const { hashId } = req.params;
+
+    const originalId = hashDecodeId(hashId);
+
+    if (!originalId) {
+      return res.status(404).json({ error: 'Invalid profile ID' });
+    }
+
+    const [user] = await promisePool.query(`SELECT * FROM user_profiles WHERE id = ?`, [id]);
+
+    if (user.length === 0) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+
+    const profile = [user[0]];
+
+
+    res.status(200).json({ profile });
+  })
+
   server.get('/api/users/:id', async (req, res) => {
     const { id } = req.params;
 
@@ -48,7 +73,7 @@ app.prepare().then(() => {
   server.post('/api/privacy-settings/:profileId', async (req, res) => {
     const { profileId } = req.params;
     const settings = req.body;
-   
+
     try {
       const settingsJson = JSON.stringify(settings);
       console.log(settingsJson)
@@ -56,7 +81,7 @@ app.prepare().then(() => {
         'UPDATE user_profiles SET privacy_settings = ? WHERE id = ?',
         [settingsJson, profileId]
       );
-    
+
       res.status(200).json({ message: 'Privacy settings updated successfully' });
     } catch (error) {
       res.status(500).json({ message: 'Error updating privacy settings', error });
@@ -227,7 +252,14 @@ app.prepare().then(() => {
     }
 
     try {
-      const [profile] = await promisePool.query('SELECT * FROM user_profiles WHERE user_id = ?', [user_id]);
+      const [profile] = await promisePool.query(
+        `SELECT up.*, c.company_name 
+         FROM user_profiles up
+         LEFT JOIN Companies c ON up.company = c.id
+         WHERE up.user_id = ?`,
+        [user_id]
+      );
+
 
       if (profile.length > 0) {
         return res.status(200).json({ profile: profile });
@@ -342,8 +374,8 @@ app.prepare().then(() => {
     const networkId = req.params.id;
 
     try {
-      const members = await promisePool.query(`
-        SELECT user_profiles.*, NetworkMember.role 
+      const [members] = await promisePool.query(`
+        SELECT user_profiles.*, NetworkMember.role, NetworkMember.profileId
         FROM NetworkMember JOIN user_profiles ON NetworkMember.profileId = user_profiles.id 
         WHERE NetworkMember.networkId = ?
       `, [networkId]);
@@ -452,10 +484,11 @@ app.prepare().then(() => {
     try {
       await promisePool.query(
         `INSERT INTO week_searches (profileId, search_text, start_date, end_date)
-             VALUES (?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?)`,
         [profileId, search_text, start_date, end_date]
       );
-      res.status(201).json({ message: "Week search post successfully created!" });
+
+      res.status(201).json({ message: "Week search successfully created!" });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -468,7 +501,7 @@ app.prepare().then(() => {
         FROM week_searches
         JOIN user_profiles ON week_searches.profileId = user_profiles.id
         WHERE week_searches.is_active = 1
-        ORDER BY created_at DESC
+        ORDER BY start_date DESC
       `);
       res.status(200).json({ result });
     } catch (err) {
@@ -478,11 +511,24 @@ app.prepare().then(() => {
 
   server.get('/api/week-searches/:profileId', async (req, res) => {
     const profileId = req.params.profileId;
+    const { twoWeeks } = req.query;
+    let query = `SELECT * FROM week_searches WHERE profileId = ?`;
+    const queryParams = [profileId];
+
     try {
-      const [result] = await promisePool.query(`
-        SELECT * FROM week_searches WHERE profileId = ?
-        ORDER BY created_at DESC
-      `, [profileId]);
+
+      if (twoWeeks === 'true') {
+        const twoWeeksAgo = new Date();
+        twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+        const formattedDate = twoWeeksAgo.toISOString().split('T')[0];
+
+        query += ` AND start_date >= ?`;
+        queryParams.push(formattedDate);
+      }
+
+      query += ` ORDER BY start_date DESC`;
+
+      const [result] = await promisePool.query(query, queryParams);
 
       res.status(200).json({ result });
     } catch (err) {
@@ -490,12 +536,25 @@ app.prepare().then(() => {
     }
   });
 
-  server.delete('/api/week-searches/:id', async (req, res) => {
+  server.delete('/api/week-searches/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
+    const userId = req.userId;
 
     try {
-      await promisePool.query(`DELETE FROM week_searches WHERE id = ?`, [id]);
-      res.status(200).json({ message: 'Week search deleted successfully' });
+      const [profile] = await promisePool.query(`SELECT id FROM user_profiles WHERE user_id = ?`, [userId])
+
+      if (profile.length === 0) {
+        res.status(404).json({ message: "Profile not found!" })
+      }
+
+      const [weekSearch] = await promisePool.query("SELECT * FROM week_searches WHERE id = ?", [id])
+
+      if (weekSearch[0].profileId !== profile[0].id) {
+        res.status(203).json({ message: "You don't have permission to do this!" })
+      } else {
+        await promisePool.query(`DELETE FROM week_searches WHERE id = ?`, [id]);
+        res.status(200).json({ message: 'Week search deleted successfully' });
+      }
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -503,7 +562,7 @@ app.prepare().then(() => {
 
   server.put('/api/week-searches/:id', async (req, res) => {
     const { id } = req.params;
-    const { search_text } = req.body;
+    const { search_text, is_active } = req.body;
 
     if (!search_text) {
       return res.status(400).json({ error: 'Search text is required' });
@@ -520,8 +579,8 @@ app.prepare().then(() => {
       }
 
       await promisePool.query(
-        'UPDATE week_searches SET search_text = ?, updated_at = NOW() WHERE id = ?',
-        [search_text, id]
+        'UPDATE week_searches SET search_text = ?, is_active = ?, updated_at = NOW() WHERE id = ?',
+        [search_text, is_active, id]
       );
 
       res.status(200).json({ message: 'Week search updated successfully' });
@@ -584,6 +643,170 @@ app.prepare().then(() => {
     }
   });
 
+  server.get('/api/search-week-searches', async (req, res) => {
+    const { search = "", filter } = req.query;
+
+    try {
+      const currentDate = new Date().toISOString().split('T')[0];
+
+
+      let dateCondition = '';
+      if (filter === 'thisWeek') {
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 7);
+        const startDateStr = startDate.toISOString().split('T')[0];
+        dateCondition = `start_date >= '${startDateStr}'`;
+      } else if (filter === 'twoWeeks') {
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 14);
+        const startDateStr = startDate.toISOString().split('T')[0];
+        dateCondition = `start_date >= '${startDateStr}'`;
+      } else if (filter === 'thisMonth') {
+        const startDate = new Date(currentDate);
+        startDate.setDate(startDate.getDate() - 30);
+        const startDateStr = startDate.toISOString().split('T')[0];
+        dateCondition = `start_date >= '${startDateStr}'`;
+      }
+
+
+      let query = `
+        SELECT week_searches.*, 
+               user_profiles.avatar, 
+               user_profiles.first_name, 
+               user_profiles.last_name, 
+               user_profiles.address1
+        FROM week_searches
+        JOIN user_profiles ON week_searches.profileId = user_profiles.id
+        WHERE week_searches.is_active = 1 
+        AND week_searches.search_text LIKE ?`;
+
+      const queryParams = [`%${search}%`];
+
+      if (dateCondition) {
+        query += ` AND (${dateCondition})`;
+      }
+
+      query += ` ORDER BY week_searches.start_date DESC`;
+
+      const [rows] = await promisePool.query(query, queryParams);
+
+      res.status(200).json(rows);
+    } catch (error) {
+      console.error('Error executing query', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+
+
+
+
+  server.post('/api/companies', async (req, res) => {
+    const { profileId, company_name } = req.body;
+
+    try {
+      const [existingCompany] = await promisePool.query(
+        `SELECT * FROM Companies WHERE profileId = ?`,
+        [profileId]
+      );
+
+      if (existingCompany.length > 0) {
+        return res.status(400).json({ error: "You can create only one company" });
+      }
+
+      const [insertResult] = await promisePool.query(
+        `INSERT INTO Companies (profileId, company_name) VALUES (?, ?)`,
+        [profileId, company_name]
+      );
+
+      const companyId = insertResult.insertId;
+
+     
+      await promisePool.query(
+        `UPDATE user_profiles SET company = ? WHERE id = ?`,
+        [companyId, profileId]
+      );
+      res.status(201).json({ message: "Company successfully created!" });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  server.put('/api/companies/:companyId', authenticateToken, async (req, res) => {
+    const { companyId } = req.params;
+    const { company_name, company_logo } = req.body;
+    const userId = req.userId;
+
+    try {
+      const [profile] = await promisePool.query(`SELECT id FROM user_profiles WHERE user_id = ?`, [userId])
+
+      if (profile.length === 0) {
+        res.status(404).json({ message: "Profile not found!" })
+      }
+
+      const [company] = await promisePool.query("SELECT * FROM Companies WHERE id = ?", [companyId])
+
+      if (company[0].profileId !== profile[0].id) {
+        res.status(403).json({ message: "You don't have permission to do this!" })
+      }
+
+      await promisePool.query('UPDATE Companies SET company_name = ?, company_logo = ? WHERE id = ?', [company_name, company_logo, companyId]);
+      return res.status(200).json({ message: 'Company edited successfully' });
+
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  })
+
+  server.get('/api/companies', async (req, res) => {
+    try {
+      const [companies] = await promisePool.query(`SELECT * FROM Companies`);
+      res.status(200).json({ companies });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  server.get('/api/companies/:profileId', async (req, res) => {
+    const { profileId } = req.params;
+    console.log(profileId, "SERVER :profileId");
+    try {
+      const [userCompany] = await promisePool.query(`SELECT * FROM Companies WHERE profileId = ?`, [profileId]);
+
+      if (userCompany.length === 0) {
+        return res.status(200).json({ userCompany: null });
+      }
+
+      return res.status(200).json({ userCompany: userCompany[0] });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  server.delete('/api/companies/:companyId', authenticateToken, async (req, res) => {
+    const { companyId } = req.params;
+    const userId = req.userId;
+
+    try {
+      const [profile] = await promisePool.query(`SELECT id FROM user_profiles WHERE user_id = ?`, [userId])
+
+      if (profile.length === 0) {
+        res.status(404).json({ message: "Profile not found!" })
+      }
+
+      const [company] = await promisePool.query("SELECT * FROM Companies WHERE id = ?", [companyId])
+
+      if (company[0].profileId !== profile[0].id) {
+        res.status(403).json({ message: "You don't have permission to do this!" })
+      } else {
+        await promisePool.query(`DELETE FROM Companies WHERE id = ?`, [companyId]);
+        res.status(200).json({ message: 'Company deleted successfully' });
+      }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+
+  });
 
   server.all('*', (req, res) => {
     return handle(req, res);

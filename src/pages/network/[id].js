@@ -4,21 +4,24 @@ import { useRouter } from "next/router";
 import { useTranslation } from "next-i18next";
 import ProfileCard from '../../components/ProfileCard'
 import MemberCard from "../../components/MemberCard";
+import { getUserWeekSearches } from "../../lib/week-searches";
 
 export const getServerSideProps = async (ctx) => {
    const { props } = await checkAuth(ctx);
    const id = ctx.params.id;
 
    let { network, members } = await getNetwork(id);
-   members = [...members.members[0]];
+   
+   // members = [...members[0].members];
    network = network.network[0];
    return { props: { ...props, network, members } }
 };
 
 
 export default function Network({ network, members, profile }) {
+   
    const { t } = useTranslation("common")
-
+   console.log(members)
    const router = useRouter();
    const { id: networkId } = router.query;
 

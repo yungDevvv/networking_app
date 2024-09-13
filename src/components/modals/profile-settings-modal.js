@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { useTranslation } from "next-i18next";
 import axios from "axios";
 
 function ProfileSettingsModal({setModalOpen, profileId, privacy_settings}) {
+   console.log(privacy_settings)
    const { t } = useTranslation("common")
    const router = useRouter();
 
-   const [showEmail, setShowEmail] = useState(privacy_settings.email || false);
-   const [showPhone, setShowPhone] = useState(privacy_settings.phone || false);
+   const [showEmail, setShowEmail] = useState(privacy_settings?.email || false);
+   const [showPhone, setShowPhone] = useState(privacy_settings?.phone || false);
 
    const handleSubmit = async () => {
       try {
@@ -19,6 +20,7 @@ function ProfileSettingsModal({setModalOpen, profileId, privacy_settings}) {
       
          if(res) {
             setModalOpen(false);
+            router.replace(router.asPath)
          }
       } catch (error) {
          console.log("Error sending privacy settings: ", error)
@@ -26,6 +28,10 @@ function ProfileSettingsModal({setModalOpen, profileId, privacy_settings}) {
       
    }
 
+
+   useEffect(() => {
+      console.log(showEmail, showPhone)
+   }, [showEmail, showPhone])
    return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-hidden">
          <div className="bg-white p-6 rounded-lg shadow-lg max-w-lg w-full">

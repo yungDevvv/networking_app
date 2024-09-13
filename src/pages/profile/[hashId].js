@@ -1,34 +1,43 @@
-
-// pages/index.js
-import { useEffect, useState } from "react";
-import { checkAuth } from '../lib/check-auth';
-import { companiesList } from "../utils/companies_data";
-import { createClient } from '../lib/supabase/component'
+import { Fragment } from "react";
+import { getUserProfile } from "../../lib/users";
+import { companiesList } from "../../utils/companies_data";
 import { useRouter } from "next/router";
+import Head from "next/head";
 
-export const getServerSideProps = async (ctx) => {
-  return await checkAuth(ctx);
-};
+export async function getServerSideProps(ctx) {
+  const { hashId } = ctx.params;
 
-export default function Index ({ profile}) {
-  console.log(profile)
+  const { hashDecodeId } = require('../../../hashId');
+  const originalId = hashDecodeId(hashId);
+  console.log(originalId)
+  const { user } = await getUserProfile(originalId);
+
+  return { props: { profile: user } }
+}
+export default function Profile({ profile }) {
+
   const router = useRouter();
-  const businessNetworks = profile?.businessNetworks
-  ? companiesList.filter(el => el.name === profile.businessNetworks.find(bns => bns === el.name))
-  : [];
-  useEffect(() => {
-    
-    const getSession = async () => {
-      const supabase = createClient();
-      const { data, error } = await supabase.auth.getSession()
-      console.log(data)
-    }
-    getSession()
-  }, [])
+  const { hashId } = router.query;
 
-  return ( 
-    <div className="w-full h-full p-6">
-        <div className="max-w-6xl mx-auto bg-white shadow-md rounded-lg overflow-hidden">
+  const businessNetworks = profile?.businessNetworks
+    ? companiesList.filter(el => el.name === profile.businessNetworks.find(bns => bns === el.name))
+    : [];
+
+  if (!profile) return "Profile not found"
+  return (
+    <Fragment>
+     
+      <Head>
+        <meta property="og:title" content={`${profile.first_name} ${profile.last_name} - Profile`} />
+        {/* <meta property="og:description" content={profile.notice || 'No description available'} /> */}
+        <meta property="og:image" content={profile.avatar || '/blank_profile.png'} />
+        <meta property="og:url" content={`https://nodetest.crossmedia.fi/profile/${hashId}`} />
+        <meta property="og:type" content="profile" />
+        <title>{profile.first_name} {profile.last_name} - Profile</title>
+      </Head>
+
+      <div className="w-full h-full bg-gray-100 p-6">
+        <div className="max-w-4xl mx-auto bg-white shadow-md rounded-lg overflow-hidden">
           <div className="h-60 overflow-hidden">
             <img src={"/bg_image.jpg"} className="object-cover" />
           </div>
@@ -43,7 +52,7 @@ export default function Index ({ profile}) {
                 <p className=" text-gray-600">{profile.address1}</p>
               </div>
             </div>
-            
+
             <div className="mt-4 sm:mt-0">
               {profile.privacy_settings?.email && (
                 <a href={`mailto:${profile?.email_address}`} className="block text-blue-500 hover:underline">
@@ -65,6 +74,7 @@ export default function Index ({ profile}) {
               businessNetworks.map((el, i) => <img key={i} className='w-[45px] h-[45px]' src={el.image} alt="network_logo" title={el.name} />)
             }
           </div>
+
           <div className="p-6 border-t border-gray-200">
             <h3 className="text-lg font-medium text-gray-900">Introduction</h3>
             <p className="mt-2 text-gray-700">{profile.notice}</p>
@@ -82,6 +92,6 @@ export default function Index ({ profile}) {
           </div>
         </div>
       </div>
+    </Fragment>
   );
-};
-
+}

@@ -8,28 +8,31 @@ import { createClient } from '../../lib/supabase/component';
 import { useRouter } from 'next/router';
 import { useState } from 'react';
 
-
-const MainLayout = ({ children, profile }) => {
+const MainLayout = ({ children, profile, user }) => {
    const { t } = useTranslation("common")
    const router = useRouter();
-  
+
    const handleLogout = async () => {
       const supabase = createClient();
       await supabase.auth.signOut();
       router.push("/auth/login");
    }
 
-   const [isOpen, setIsOpen] = useState(false);  
+   const [isOpen, setIsOpen] = useState(false);
    const toggleDropdown = () => {
-     setIsOpen(!isOpen);
+      setIsOpen(!isOpen);
    };
-
+   
    return (
       <div>
 
          <header className="flex px-5 py-3 justify-between w-full items-center h-[65px] border-b-1">
             <Logo />
             <div className='flex items-center'>
+               <div>
+                  <Bell className='text-indigo-600' />
+               </div>
+               <div className="border-l border-gray-300 h-9 mx-5"></div>
                <div>
                   <LanguageSwitcher />
                </div>
@@ -42,7 +45,7 @@ const MainLayout = ({ children, profile }) => {
             <aside className='px-5 w-[275px]'>
                <ul>
                   <li>
-                     <Link href="/" className='bg-indigo-500 transition-all duration-200 hover:bg-indigo-700 rounded-md flex items-center text-white font-medium p-2 mt-3 text-sm'>
+                     <Link href="/" className='bg-indigo-500 transition-all duration-200 hover:bg-indigo-700 rounded-md flex items-center text-white font-medium p-2 text-sm'>
                         <LayoutDashboard className='mr-2' size={21} />
                         Home
                      </Link>
@@ -101,7 +104,7 @@ const MainLayout = ({ children, profile }) => {
                         {t("navbar_logout")}
                      </button>
                   </li>
-                  
+
                </ul>
             </aside>
 

@@ -14,13 +14,13 @@ export const getNetwork = async (id) => {
    try {
       const networkRes = await axios.get(`https://nodetest.crossmedia.fi/api/networks/${id}`);
       const network = networkRes.data;
-  
+      
       const membersRes = await axios.get(`https://nodetest.crossmedia.fi/api/networks/${id}/members`);
       const members = membersRes.data;
-   
+      console.log(members, "ASDASD")
       return {
           network,
-          members,  
+          members: members.members,  
       };
     } catch (error) {
       console.error('Error fetching network or members data:', error.message);

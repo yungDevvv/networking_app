@@ -18,7 +18,6 @@ export const checkAuth = async (ctx) => {
 
   let profile = null;
 
-
   try {
     const res = await axios.get(`https://nodetest.crossmedia.fi/api/profile-exists`, {
       params: {
@@ -53,7 +52,9 @@ export const checkAuth = async (ctx) => {
 
   return {
     props: {
-      user, profile, ...(await serverSideTranslations(ctx.locale, [
+      user, 
+      profile, 
+      ...(await serverSideTranslations(ctx.locale, [
         'common',
       ]))
     }

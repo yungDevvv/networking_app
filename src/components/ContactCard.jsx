@@ -4,17 +4,38 @@ import { ContactRound, EllipsisVertical, Info, Link, Mail, MapPin, Phone, Search
 import { companiesList } from '../utils/companies_data';
 import { hashEncodeId } from '../../hashId';
 import MemberCardWeekSearch from './MemberCardWeekSearchItem';
+import { useModal } from "../context/ModalProvider";
+import { useRouter } from "next/router";
 
-const MemberCard = ({ member }) => {
+const ContactCard = ({ member, searchTerm }) => {
    
    const [isMenuOpen, setIsMenuOpen] = useState(false);
    const [contentOpen, setContentOpen] = useState(1)
    const handleMenuToggle = () => setIsMenuOpen(!isMenuOpen);
 
+   const {openModal} = useModal();
+   const router = useRouter();
+
+   const handleAddToNetwork = (profileId) => {
+      router.replace(`?profileId=${profileId}`);
+      openModal("choose-network")
+   }
+
+   const highlightText = (text) => {
+      if (!searchTerm) return text;
+
+      const regex = new RegExp(`(${searchTerm})`, 'gi');
+      const parts = text.split(regex);
+
+      return parts.map((part, index) => (
+         regex.test(part) ? <span key={index} className="bg-yellow-200">{part}</span> : part
+      ));
+   };
+
    const businessNetworks = member?.businessNetworks
       ? companiesList.filter(el => el.name === member.businessNetworks.find(bns => bns === el.name))
       : [];
-      console.log(member)
+   
    return (
       <div className={`bg-white shadow-md rounded-lg p-4 border border-gray-100 relative`}>
 
@@ -34,6 +55,9 @@ const MemberCard = ({ member }) => {
                   <ul className="py-1">
                      <li> 
                         <a href={`/profile/` + hashEncodeId(member.id)} className="block px-4 py-2 text-gray-800 hover:bg-gray-100">Profile</a>
+                     </li>
+                     <li> 
+                        <button onClick={() => handleAddToNetwork(member.id)} className="block px-4 py-2 text-gray-800 hover:bg-gray-100 w-full text-left">Add to network</button>
                      </li>
                      {/* <li>
                         <a href="#" className="block px-4 py-2 text-gray-800 hover:bg-gray-100">Kick</a>
@@ -56,9 +80,9 @@ const MemberCard = ({ member }) => {
                <img className="w-24 h-24 rounded mx-auto object-cover" src={member.avatar ? member.avatar : '/blank_profile.png'} alt="Avatar" />
             </div>
             <div>
-               <h2 className="text-md font-semibold">{member.first_name} {member.last_name}{member.role === "ADMIN" && <span className='font-normal text-red-500'> (ADMIN)</span>}</h2>
+               <h2 className="text-md font-semibold">{highlightText(member.first_name)} {highlightText(member.last_name)}{member.role === "ADMIN" && <span className='font-normal text-red-500'> (ADMIN)</span>}</h2>
                <p className='text-indigo-500'>{member.title}</p>
-               <p className=''>{member.company}</p>
+               <p>{highlightText(member.company)}</p>
             </div>
             <div className='ml-auto'>
                {
@@ -77,7 +101,7 @@ const MemberCard = ({ member }) => {
                            <div className="rounded bg-indigo-100 p-[5px] mr-2">
                               <Phone size={18} className='text-indigo-700' />
                            </div>
-                           <span>{member.phone}</span>
+                           <span>{highlightText(member.phone)}</span>
                         </div>
                      )
                   }
@@ -87,7 +111,7 @@ const MemberCard = ({ member }) => {
                            <div className="rounded bg-indigo-100 p-1 mr-2">
                               <Mail size={18} className='text-indigo-700' />
                            </div>
-                           <span>{member.email_address}</span>
+                           <span>{highlightText(member.email_address)}</span>
                         </div>
                      )
                   }
@@ -97,7 +121,7 @@ const MemberCard = ({ member }) => {
                            <div className="rounded bg-indigo-100 p-1 mr-2">
                               <MapPin size={18} className='text-indigo-700' />
                            </div>
-                           <span>{member.address1}</span>
+                           <span>{highlightText(member.address1)}</span>
                         </div>
                      )
                   }
@@ -108,26 +132,27 @@ const MemberCard = ({ member }) => {
                   <div>
                      <strong className="text-gray-700">Esittely:</strong>
                      <p className="text-gray-600 text-sm leading-tight">
-                        {member.notice}
+                        {highlightText(member.notice)}
                      </p>
                   </div>
                   <div>
                      <strong className="text-gray-700">Tarjoamme:</strong>
                      <p className="text-gray-600 text-sm leading-tight">
-                        {member.offering}
+                        {highlightText(member.offering)}
                      </p>
                   </div>
                   <div>
                      <strong className="text-gray-700">Etsimme:</strong>
                      <p className="text-gray-600 text-sm leading-tight">
-                        {member.searching}
+                        {highlightText(member.searching)}
                      </p>
                   </div>
                </div>
             )}
 
             {contentOpen === 3 && (
-               <MemberCardWeekSearch profileId={member.profileId} />
+               // <MemberCardWeekSearch profileId={member.profileId} />
+               <MemberCardWeekSearch profileId={member.id} />
             )}
             
 
@@ -138,10 +163,12 @@ const MemberCard = ({ member }) => {
             <button onClick={() => setContentOpen(2)} className={'bg-indigo-100 px-4 py-2 rounded hover:bg-indigo-200 text-indigo-700 transition-all duration-150 ' + `${contentOpen === 2 && "!text-gray-200 bg-indigo-500 hover:text-gray-200 hover:bg-indigo-500"}`}><Info /></button>
             <button onClick={() => setContentOpen(3)} className={'bg-indigo-100 px-4 py-2 rounded hover:bg-indigo-200 text-indigo-700 transition-all duration-150 ' + `${contentOpen === 3 && "!text-gray-200 bg-indigo-500 hover:text-gray-200 hover:bg-indigo-500"}`}><Search /></button>
          </div>
+
+         
       </div>
    );
 };
 
-export default MemberCard;
+export default ContactCard;
 
 
