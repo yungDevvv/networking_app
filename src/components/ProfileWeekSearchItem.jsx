@@ -5,7 +5,7 @@ import WeekSearchComment from "./WeekSearchComment";
 import { createWeekSearchComment, getWeekSearchComments } from "../lib/week-searches";
 import { i18n } from 'next-i18next';
 
-const WeekSearchItem = ({ weekSearch, profileId, avatar }) => {
+const ProfileWeekSearchItem = ({ weekSearch, profileId, avatar }) => {
    const currentLanguage = i18n.language;
 
    const [commentsOpen, setCommentsOpen] = useState(false);
@@ -32,20 +32,20 @@ const WeekSearchItem = ({ weekSearch, profileId, avatar }) => {
    }, [])
    
    return (
-      <div className="p-3 border border-indigo-200 rounded-md mt-3">
+      <div className="2xl:p-3 p-2 border border-indigo-200 rounded-md mb-3">
          <div className="flex items-center">
-            <img src={weekSearch.avatar ? weekSearch.avatar : "/blank_profile.png"} alt="avatar" className="w-[50px] h-[50px] mr-2 rounded object-cover" />
+            <img src={weekSearch.avatar ? weekSearch.avatar : "/blank_profile.png"} alt="avatar" className="2xl:w-[50px] 2xl:h-[50px] w-[40px] h-[40px] mr-2 rounded object-cover" />
             <div>
-               <strong className="font-semibold w-full">{weekSearch.first_name} {weekSearch.last_name}</strong>
+               <strong className="font-semibold w-full xl:text-base text-sm">{weekSearch.first_name} {weekSearch.last_name[0]}.</strong>
                <div className="flex items-center">
-                  <MapPin size={16} className="text-indigo-600 mr-1" />
-                  <span className="text-sm">{weekSearch.address1}</span>
+                  <MapPin size={16} className="text-indigo-600" />
+                  <span className="xl:text-sm text-xs">{weekSearch.address1}</span>
                </div>
             </div>
             <div className="ml-auto self-start">
                <div className="flex items-center">
-                  <Clock size={16} className="text-indigo-600 mr-1" />
-                  <span className="text-sm text-gray-500">{formatDateTime(weekSearch.start_date, currentLanguage)}</span> 
+                  <Clock className="text-indigo-600 mr-1 w-[16px]" />
+                  <span className="xl:text-sm text-xs text-gray-500 ">{formatDateTime(weekSearch.start_date, currentLanguage)}</span> 
                </div>
               
             </div>
@@ -55,20 +55,14 @@ const WeekSearchItem = ({ weekSearch, profileId, avatar }) => {
             {weekSearch.search_text}
          </p>
 
-         <div className="mt-4">
-            {/* <button onClick={() => handleDelete(weekSearch.id)} type="button" className="bg-red-600 rounded-md py-1 px-2">
-               <Trash2 size={20} color="#fff" />
-            </button>
-            <button onClick={() => setEditorOpen(open => !open)} type="button" className="bg-indigo-500 rounded-md py-1 px-2">
-               <FilePenLine size={20} color="#fff" />
-            </button> */}
+         {/* <div className="mt-4">
             <button onClick={() => setCommentsOpen(open => !open)} type="button" className="bg-indigo-500 rounded-md py-1 px-2 flex items-center">
                <MessageSquare size={20} color="#fff" />
                <span className="text-white ml-1 -mt-1">{comments.length}</span>
             </button>
-         </div>
+         </div> */}
 
-         {commentsOpen && (
+         {/* {commentsOpen && (
             <Fragment>
                <hr className="border-indigo-200 my-3" />
                <div className="p-3 rounded-md bg-gray-100">
@@ -85,9 +79,9 @@ const WeekSearchItem = ({ weekSearch, profileId, avatar }) => {
                   </div>
                </div>
             </Fragment>
-         )}
+         )} */}
       </div>
    )
 }
 
-export default WeekSearchItem;
+export default ProfileWeekSearchItem;

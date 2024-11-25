@@ -1,4 +1,5 @@
 import axios from "axios"
+import { getSession } from "./supabase/getAccessToken";
 
 export const getUserNetworks = async (id) => {
    try {
@@ -10,25 +11,21 @@ export const getUserNetworks = async (id) => {
    }
 }
 
-export const getNetwork = async (id) => {
+export const getNetworkWithMembers = async (id) => {
    try {
       const networkRes = await axios.get(`https://nodetest.crossmedia.fi/api/networks/${id}`);
       const network = networkRes.data;
-      
+
       const membersRes = await axios.get(`https://nodetest.crossmedia.fi/api/networks/${id}/members`);
       const members = membersRes.data;
-      console.log(members, "ASDASD")
+   
       return {
-          network,
-          members: members.members,  
+         network,
+         members: members.members,
       };
-    } catch (error) {
+   } catch (error) {
       console.error('Error fetching network or members data:', error.message);
-  
-      // return {
-      //   notFound: true,
-      // };
-    }
+   }
 }
 
 export const getUserAdminNetworks = async (profileId) => {
@@ -59,15 +56,35 @@ export const addUserToNetwork = async (profileId, networkId) => {
 };
 
 
-export const removeUserFromNetwork = async (profileId, networkId, memberId) => {
+export const removeUserFromNetwork = async (networkId, memberProfileId) => {
+   const access_token = await getSession();
+  
    try {
-      const res = await axios.post('/api/networks/remove-member', {
-         profileId,
-         networkId,
-         memberId
+      const res = await axios.delete(`/api/networks/${networkId}/members/${memberProfileId}`, {
+         headers: {
+            'Authorization': `Bearer ${access_token}`
+         }
       });
 
-      return res.data;
+      return res;
+   } catch (error) {
+      console.error('Failed to add user to network:', error);
+
+      return { error: error.response?.data?.error || 'An unexpected error occurred.' };
+   }
+};
+
+export const leaveNetwork = async (networkId) => {
+   const access_token = await getSession();
+  
+   try {
+      const res = await axios.delete(`/api/networks/${networkId}/leave`, {
+         headers: {
+            'Authorization': `Bearer ${access_token}`
+         }
+      });
+
+      return res;
    } catch (error) {
       console.error('Failed to add user to network:', error);
 
@@ -78,19 +95,19 @@ export const removeUserFromNetwork = async (profileId, networkId, memberId) => {
 export const createNetwork = async (name, profileId) => {
    try {
       const res = await axios.post("/api/create-network", {
-          name,
-          profileId
-       })
-       return res;
-    } catch (error) {
-       console.error(error)
-    }
+         name,
+         profileId
+      })
+      return res;
+   } catch (error) {
+      console.error(error)
+   }
 }
 
 export const deleteNetwork = async (networkId) => {
    try {
       const res = await axios.delete(`/api/networks/${networkId}/delete`);
-      
+
    } catch (error) {
       console.error(error)
    }

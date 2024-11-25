@@ -39,7 +39,7 @@ export default function MyNetworks({ networks }) {
                      </button>
                   </Link>
                ))
-               : "Non of your networks found!"
+               : <span>{t("asd200")}</span>
             }
          </div>
       </div>

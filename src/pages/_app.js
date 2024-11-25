@@ -13,7 +13,7 @@ function MyApp({ Component, pageProps }) {
   const { pathname } = router;
   console.log(pathname)
   // const isAuthPage = !['/auth/login', '/auth/register', '/auth/reset-password', '/auth/update-password', '/auth/profile', '/profile/*'].includes(pathname);
-  const isAuthPage = !['/auth/login', '/auth/register', '/auth/reset-password', '/auth/update-password', '/auth/profile', '/profile/[hashId]'].includes(pathname);
+  const isAuthPage = !['/auth/login', '/auth/register', '/auth/reset-password', '/auth/update-password', '/auth/profile', '/profile/[hashId]', '/private-group/no-access'].includes(pathname);
   
   return (
     // <NextUIProvider>

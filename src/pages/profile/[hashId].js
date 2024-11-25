@@ -6,15 +6,16 @@ import Head from "next/head";
 
 export async function getServerSideProps(ctx) {
   const { hashId } = ctx.params;
-
+  
   const { hashDecodeId } = require('../../../hashId');
   const originalId = hashDecodeId(hashId);
-  console.log(originalId)
+  
   const { user } = await getUserProfile(originalId);
 
   return { props: { profile: user } }
 }
 export default function Profile({ profile }) {
+  
 
   const router = useRouter();
   const { hashId } = router.query;
@@ -22,8 +23,12 @@ export default function Profile({ profile }) {
   const businessNetworks = profile?.businessNetworks
     ? companiesList.filter(el => el.name === profile.businessNetworks.find(bns => bns === el.name))
     : [];
-
-  if (!profile) return "Profile not found"
+ 
+  if (!profile) return "Profile not found";
+  
+  if(!profile.privacy_settings?.show_profile) {
+    return "The user has prohibited showing his profile";
+  }
   return (
     <Fragment>
      
@@ -48,7 +53,7 @@ export default function Profile({ profile }) {
               </div>
               <div className="ml-6">
                 <h2 className="text-2xl font-bold text-gray-900">{profile.first_name} {profile.last_name}</h2>
-                <p> <span className="text-indigo-500">{profile.title}</span> at <span className="text-indigo-500">{profile.company}</span></p>
+                <p> <span className="text-indigo-500">{profile.title}</span> at <span className="text-indigo-500">{profile.company_name}</span></p>
                 <p className=" text-gray-600">{profile.address1}</p>
               </div>
             </div>

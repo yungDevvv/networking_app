@@ -11,6 +11,7 @@ export const getCompanies = async () => {
 }
 
 export const getUserCompany = async (profileId) => {
+   
    try {
       const res = await axios.get(`https://nodetest.crossmedia.fi/api/companies/${profileId}`); 
       return res.data;
@@ -19,10 +20,11 @@ export const getUserCompany = async (profileId) => {
    }
 }
 
-export const createCompany = async (name, profileId) => {
+export const createCompany = async (name, logo, profileId) => {
    try {
       const res = await axios.post("https://nodetest.crossmedia.fi/api/companies", {
           company_name: name,
+          company_logo: logo,
           profileId
        })
        return res;
@@ -41,6 +43,24 @@ export const editCompany = async (company_name, company_logo, companyId) => {
           company_name,
           company_logo
          },
+         {
+            headers: {
+               'Authorization': `Bearer ${access_token}`  
+             }
+         }
+      )
+       return res;
+    } catch (error) {
+       console.error("ERROR creating company ", error)
+       return error;
+    }
+}
+
+export const deleteCompany = async (companyId) => {
+   const access_token = await getSession(); 
+
+   try {
+      const res = await axios.delete("https://nodetest.crossmedia.fi/api/companies/" + companyId, 
          {
             headers: {
                'Authorization': `Bearer ${access_token}`  

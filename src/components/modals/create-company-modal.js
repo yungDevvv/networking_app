@@ -1,18 +1,24 @@
 import { X } from "lucide-react"
 import { Fragment, useEffect, useRef, useState } from "react";
-import { createCompany, editCompany } from "../../lib/companies";
+import { createCompany, deleteCompany, editCompany } from "../../lib/companies";
+import { useRouter } from "next/router";
+import { success } from "../../lib/toastify";
+import { useTranslation } from "next-i18next";
 
 function CreateCompanyModal({ profileId, setCreateCompanyModalOpen, userCompany }) {
    const [companyName, setCompanyName] = useState(userCompany ? userCompany.company_name : "");
    const [errorMessage, setErrorMessage] = useState("");
    const [companyImage, setCompanyImage] = useState(userCompany ? userCompany.company_logo : "");
-
+   const { t } = useTranslation('common'); 
+   const router = useRouter();
    const fileInputRef = useRef();
-  
+   
    const handleSubmit = async () => {
-      const res = await createCompany(companyName, profileId);
+      const res = await createCompany(companyName, companyImage, profileId);
 
       if (res.status === 201) {
+         router.reload();
+         success("Your company was successfully created!")
          setCreateCompanyModalOpen(false);
       } else {
          setErrorMessage(res.response.data.error)
@@ -22,13 +28,28 @@ function CreateCompanyModal({ profileId, setCreateCompanyModalOpen, userCompany 
       const res = await editCompany(companyName, companyImage, userCompany.id);
 
       if (res.status === 200) {
+         router.replace(router.asPath);
+         success("Your company was successfully updated!")
          setCreateCompanyModalOpen(false);
       } else {
-         console.log(res.response.data.message)
+       
          setErrorMessage(res.response.data.message)
       }
    }
    
+   const handleDelete = async () => {
+      const res = await deleteCompany(userCompany.id);
+
+      if (res.status === 200) {
+         // success("Your company was successfully updated!")
+         setCreateCompanyModalOpen(false);
+         router.reload();
+      } else {
+       
+         setErrorMessage(res.response.data.message)
+      }
+   }
+
    const handleImage = (e) => {
 
       const { files } = e.target;
@@ -45,7 +66,7 @@ function CreateCompanyModal({ profileId, setCreateCompanyModalOpen, userCompany 
          const file = files[0];
          const reader = new FileReader();
          reader.onloadend = () => {
-            console.log(reader.result)
+            
             setCompanyImage(reader.result)
          };
 
@@ -73,11 +94,11 @@ function CreateCompanyModal({ profileId, setCreateCompanyModalOpen, userCompany 
          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full ">
             <div className="flex justify-between items-center">
                <div>
-                  <h2 className="text-xl font-semibold -mt-1">{userCompany ? "Edit company" : "Create company"}</h2>
+                  <h2 className="text-xl font-semibold -mt-1">{userCompany ? t("edit_company") : t("create_company")}</h2>
                   <small className="block">
                      {userCompany
-                        ? "The changes will also take effect for all users who have chosen this company."
-                        : "Make sure that you don't miss spell company name"
+                        ? t("asd5")
+                        : t("asd4")
                      }
                   </small>
                   {errorMessage && <p className="text-sm text-red-500 my-1">{errorMessage}</p>}
@@ -91,7 +112,7 @@ function CreateCompanyModal({ profileId, setCreateCompanyModalOpen, userCompany 
             </div>
             <div className="my-5">
                <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700">Company name <span className='text-red-600'>*</span></label>
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-700">{t("company_name")} <span className='text-red-600'>*</span></label>
                   <input
                      id="name"
                      name="name"
@@ -103,7 +124,7 @@ function CreateCompanyModal({ profileId, setCreateCompanyModalOpen, userCompany 
                   />
                </div>
                <div className="mt-2">
-                  <label htmlFor="companyImage" className="block text-sm font-medium text-gray-700">Company Logo (Max size: 0.5MB) <span className='text-red-600'>*</span></label>
+                  <label htmlFor="companyImage" className="block text-sm font-medium text-gray-700">{t("company_logo")} (Max size: 0.5MB) <span className='text-red-600'>*</span></label>
                   <input
                      id="companyImage"
                      name="companyImage"
@@ -128,12 +149,12 @@ function CreateCompanyModal({ profileId, setCreateCompanyModalOpen, userCompany 
                {userCompany
                   ? (
                      <Fragment>
-                        <button onClick={() => handleEdit()} className="bg-indigo-600 self-start text-white py-2 px-4 rounded-md hover:bg-indigo-700">Edit</button>
-                        <button type="button" className="bg-red-500 self-start text-white py-2 px-4 rounded-md hover:bg-red-700">Delete</button>
+                        <button onClick={() => handleEdit()} className="bg-indigo-600 self-start text-white py-2 px-4 rounded-md hover:bg-indigo-700">{t("edit")}</button>
+                        <button onClick={() => handleDelete()} type="button" className="bg-red-500 self-start text-white py-2 px-4 rounded-md hover:bg-red-700">{t("delete")}</button>
                      </Fragment>
                      
                   )
-                  : <button onClick={() => handleSubmit()} className="bg-indigo-600 self-start text-white py-2 px-4 rounded-md hover:bg-indigo-700">Create</button>
+                  : <button onClick={() => handleSubmit()} className="bg-indigo-600 self-start text-white py-2 px-4 rounded-md hover:bg-indigo-700">{t("create")}</button>
                }
             </div>
          </div>

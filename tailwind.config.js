@@ -11,7 +11,11 @@ module.exports = {
     // './node_modules/@nextui-org/theme/dist/components/(button|snippet|code|input).js'
   ],
   theme: {
-    extend: {},
+    extend: {
+      screens: {
+        'thousand': '1000px', 
+      },
+    },
   },
   // plugins: [nextui()],
   plugins: [],

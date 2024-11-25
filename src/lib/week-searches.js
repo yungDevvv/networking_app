@@ -10,9 +10,10 @@ export const createWeekSearches = async (data) => {
    }
 }
 
-export const getWeekSearches = async () => {
+export const getWeekSearches = async (count = false) => {
+   console.log(`https://nodetest.crossmedia.fi/api/week-searches${count ? `?count=${count}` : ''}`)
    try {
-      const res = await axios.get("https://nodetest.crossmedia.fi/api/week-searches");
+      const res = await axios.get(`https://nodetest.crossmedia.fi/api/week-searches${count ? `?count=${count}` : ''}`);
       return res.data;
    } catch (error) {
       console.error("Error getting search post", error)
@@ -47,11 +48,12 @@ export const deleteUserWeekSearch = async (id, profileId) => {
    }
 }
 
-export const updateUserWeekSearch = async (id, text, is_active) => {
+export const updateUserWeekSearch = async (id, text, is_active, end_date) => {
    try {
       const res = await axios.put(`https://nodetest.crossmedia.fi/api/week-searches/${id}`, {
          search_text: text,
-         is_active
+         is_active,
+         end_date
       });
       return res.data;
    } catch (error) {
@@ -62,7 +64,7 @@ export const updateUserWeekSearch = async (id, text, is_active) => {
 export const updateUserWeekSearchStatus = async (id, text) => {
    try {
       const res = await axios.put(`https://nodetest.crossmedia.fi/api/week-searches/${id}`, {
-         search_text: text
+         search_text: text,
       });
       return res.data;
    } catch (error) {

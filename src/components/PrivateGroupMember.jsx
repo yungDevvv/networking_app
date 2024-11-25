@@ -6,8 +6,8 @@ import { hashEncodeId } from '../../hashId';
 import MemberCardWeekSearch from './MemberCardWeekSearchItem';
 import { useTranslation } from 'next-i18next';
 
-const MemberCard = ({ member, isAdmin, deleteMemberFromNetwork }) => {
-   const { t } = useTranslation("common");
+const PrivateGroupMember = ({ member, isAdmin, handleRemoveMember, handleChangeRole }) => {
+   const {t} = useTranslation("common")
    const [isMenuOpen, setIsMenuOpen] = useState(false);
    const [contentOpen, setContentOpen] = useState(1)
    const handleMenuToggle = () => setIsMenuOpen(!isMenuOpen);
@@ -15,8 +15,6 @@ const MemberCard = ({ member, isAdmin, deleteMemberFromNetwork }) => {
    const businessNetworks = member?.businessNetworks
       ? companiesList.filter(el => el.name === member.businessNetworks.find(bns => bns === el.name))
       : [];
-
-
 
    return (
       <div className={`bg-white shadow-md rounded-lg p-4 border border-gray-100 relative`}>
@@ -40,10 +38,16 @@ const MemberCard = ({ member, isAdmin, deleteMemberFromNetwork }) => {
                         <Fragment>
                            <hr />
                            <button onClick={() => {
-                              deleteMemberFromNetwork(member.id);
+                              handleRemoveMember(member.id);
                               setIsMenuOpen(false);
                            }} className="block text-left w-full px-4 py-2 text-red-600 font-semibold hover:bg-gray-100">
                               {t("kick")}
+                           </button>
+                           <button onClick={() => {
+                              handleChangeRole(member.id, member.role)
+                              setIsMenuOpen(false);
+                           }} className="block text-left w-full text-indigo-500 px-4 py-2 font-semibold hover:bg-gray-100">
+                              {member.role === "GUEST" ? t("set_admin") : t("set_guest")}
                            </button>
                         </Fragment>
                      )}
@@ -79,9 +83,7 @@ const MemberCard = ({ member, isAdmin, deleteMemberFromNetwork }) => {
                }
             </div>
          </div>
-         <div className='w-24 h-[50px] mt-1'>
-            {member?.company_logo && <img className='object-contain' src={member.company_logo} alt="company logo" />}
-         </div>
+         <img className='w-24 h-[50px] mt-1 object-contain' src={member.company_logo} alt="company logo" />
          <hr className='my-5' />
          <div className="flex items-start justify-center flex-col min-h-[150px]">
             {contentOpen === 1 && (
@@ -157,6 +159,6 @@ const MemberCard = ({ member, isAdmin, deleteMemberFromNetwork }) => {
    );
 };
 
-export default MemberCard;
+export default PrivateGroupMember;
 
 

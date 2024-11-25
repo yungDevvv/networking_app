@@ -6,15 +6,15 @@ import { getUsersProfiles } from "../../lib/users";
 import axios from "axios"
 import { useTranslation } from "next-i18next";
 import ContactCard from "../../components/ContactCard";
+import { ToastContainer } from "react-toastify";
 
 export const getServerSideProps = async (ctx) => {
    const { props } = await checkAuth(ctx);
-   const users = await getUsersProfiles();
-
-   return { props: { ...props, ...users } }
+ 
+   return { props: { ...props } }
 };
 
-const usersList = ({ user, users }) => {
+const usersList = ({ user, profile }) => {
    const {t} = useTranslation("common")
    
    const [searchTerm, setSearchTerm] = useState('');
@@ -30,6 +30,7 @@ const usersList = ({ user, users }) => {
       try {
          const query = new URLSearchParams({ search: searchTerm }).toString();
          const response = await axios.get(`/api/search-users?${query}`);
+
          const me = response.data.find(member => member.user_id === user.id);
          const users = response.data.filter(user => user.user_id !== me.user_id)
          setResults(users);
@@ -38,7 +39,9 @@ const usersList = ({ user, users }) => {
       }
    };
 
-   
+   const [isInvited, setIsInvited] = useState(false);
+
+
    useEffect(() => {
       handleSearch()
    }, [])
@@ -47,7 +50,7 @@ const usersList = ({ user, users }) => {
          <div className="flex justify-between">
             <h1 className="text-2xl font-bold">{t("users")}</h1>
             <div className="relative flex items-center shadow-md">
-               <input onChange={(e) => handleChange(e)} className="py-2 px-3 border border-indigo-50" type="text" placeholder="Search..." />
+               <input onChange={(e) => handleChange(e)} className="py-2 px-3 border border-indigo-50" type="text" placeholder={t("search") + "..."} />
                <button onClick={() => handleSearch()} type="button" className="text-white h-full bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium text-sm px-5 py-2.5 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800">
                   <svg className="bi bi-search" xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#fff" viewBox="0 0 16 16">
                      <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0" />
@@ -58,11 +61,12 @@ const usersList = ({ user, users }) => {
          <div className="mx-auto py-5">
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
                {results.length !== 0
-                  ? results.map((user, i) => <ContactCard key={i} member={user} searchTerm={searchTerm} />)
+                  ? results.map((member, i) => <ContactCard key={i} member={member} searchTerm={searchTerm} />)
                   : <h3>No users</h3>
                }
             </div>
          </div>
+         <ToastContainer />
       </div>
    )
 }

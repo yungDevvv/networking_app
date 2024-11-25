@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import axios from 'axios';
 import { checkAuth } from '../../lib/check-auth';
 import { useRouter } from 'next/router';
@@ -6,7 +6,7 @@ import Link from 'next/link';
 // import { Button } from '@nextui-org/button';
 import { useTranslation } from 'next-i18next';
 import { companiesList } from '../../utils/companies_data';
-import { Plus, Search, Settings, X } from 'lucide-react';
+import { Plus, Settings, X } from 'lucide-react';
 import ProfileSettingsModal from '../../components/modals/profile-settings-modal';
 import { hashEncodeId } from '../../../hashId';
 import SearchCompanyModal from '../../components/modals/search-company-modal';
@@ -14,16 +14,20 @@ import { getCompanies, getUserCompany } from '../../lib/companies';
 import CreateCompanyModal from '../../components/modals/create-company-modal';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
 import LanguageSwitcher from '../../components/LanguageSwitcher';
-
+import { ToastContainer } from 'react-toastify';
+import { error, success } from '../../lib/toastify';
 
 export const getServerSideProps = async (ctx) => {
   const { props } = await checkAuth(ctx);
   const companies = await getCompanies();
 
   if (!props.profile) {
+    const default_company = await getUserCompany(8);
+
     return {
       props: {
         user: { ...props.user },
+        default_company: default_company.userCompany,
         companies: [...companies.companies],
         ...(await serverSideTranslations(ctx.locale, [
           'common',
@@ -33,11 +37,12 @@ export const getServerSideProps = async (ctx) => {
   }
 
   const userCompany = await getUserCompany(props.profile.id);
-
+  
   return { props: { ...props, ...companies, ...userCompany } }
 };
 
-export default function ProfilePage({ user, profile, companies, userCompany }) {
+export default function ProfilePage({ user, profile, companies, userCompany = null, default_company = null }) {
+
   const fileInputRef = useRef(null);
   const router = useRouter();
   const { t } = useTranslation('common');
@@ -48,7 +53,8 @@ export default function ProfilePage({ user, profile, companies, userCompany }) {
     firstName: profile?.first_name || user?.user_metadata.firstName || '',
     lastName: profile?.last_name || user?.user_metadata.lastName || '',
     emailAddress: user.email,
-    company_name: profile?.company_name || '',
+    company_name: profile?.company?.company_name || '',
+    company: profile?.company?.id || null,
     title: profile?.title || '',
     phone: profile?.phone || '',
     address1: profile?.address1 || '',
@@ -59,13 +65,15 @@ export default function ProfilePage({ user, profile, companies, userCompany }) {
     notice: profile?.notice || '',
     avatar: profile?.avatar || user?.user_metadata.avatar_url || ''
   });
+
   const [modalOpen, setModalOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [selCompaniesOpen, setSelCompaniesOpen] = useState(false);
   const [createCompanyModalOpen, setCreateCompanyModalOpen] = useState(false);
   const [contentOpen, setContentOpen] = useState(false);
-
-
+  const [checkError, setCheckError] = useState();
+  const [companyError, setCompanyError] = useState("");
+  const [isRegistered, setIsRegistered] = useState(false);
   const handleChange = (e) => {
     const { name, value, files } = e.target;
 
@@ -82,15 +90,16 @@ export default function ProfilePage({ user, profile, companies, userCompany }) {
 
       reader.readAsDataURL(file);
     } else if (name === 'businessNetworks') {
-      const updatedCompanies = formData.businessNetworks.includes(value)
+      const updatedBusinessNetworks = formData.businessNetworks.includes(value)
         ? formData.businessNetworks.filter((company) => company !== value)
         : [...formData.businessNetworks, value];
 
       setFormData((prevData) => ({
         ...prevData,
-        businessNetworks: updatedCompanies,
+        businessNetworks: updatedBusinessNetworks,
       }));
     } else {
+
       setFormData((prevData) => ({
         ...prevData,
         [name]: value
@@ -109,18 +118,29 @@ export default function ProfilePage({ user, profile, companies, userCompany }) {
     }
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.company) {
+      setCompanyError("This field is required");
+      return;
+    }
+    if (!formData.firstName || !formData.lastName || !formData.title || !formData.phone) {
+      setCheckError(true)
+      return;
+    }
     try {
       const response = await axios.post('/api/update-profile', {
         ...formData,
         user_id: user.id,
       });
-      if (response) {
+      if (!profile) {
         router.push('/');
+      } else {
+        success(t("profile_updated"));
       }
     } catch (err) {
       console.error(err.message);
-      alert('An error occurred while saving your profile.');
+      error(t("profile_update_error"));
     }
   };
 
@@ -139,23 +159,29 @@ export default function ProfilePage({ user, profile, companies, userCompany }) {
   }
 
   return (
-    <div className="w-full max-w-3xl bg-white p-8 rounded-lg shadow-md">
+    <div className="w-full max-w-3xl bg-white p-8 rounded-lg shadow-md relative">
+      {profile && (
+        <button onClick={() => setModalOpen(open => !open)} className='absolute right-8 top-8 hover:text-indigo-500 transition-all duration-150' title='Customize profile view'>
+          <Settings size={26} />
+        </button>
+      )}
+      <ToastContainer />
       {!profile && (
         <div className='flex justify-end'>
           <LanguageSwitcher />
         </div>
       )}
-      <h2 className="text-2xl font-semibold text-center text-gray-900 mb-2">{t("complete_profile")}</h2>
+      <h2 className="text-2xl font-semibold text-center text-gray-900 mb-2">{!profile ? t("complete_profile") : t("edit_profile")}</h2>
+
+      {checkError && <p className='text-red-500'>{t("check_req_fields")}</p>}
+
       {profile && (
         <div className='w-full flex justify-center mb-6'>
-          <Link href={"/profile/" + hashEncodeId(profile.id)} className='text-center underline text-indigo-500'>Visit your public profile</Link>
-          <button onClick={() => setModalOpen(open => !open)} className='ml-2 hover:text-indigo-500 transition-all duration-150' title='Customize profile view'>
-            <Settings />
-          </button>
+          <Link href={"/profile/" + hashEncodeId(profile.id)} className='text-center underline text-indigo-500'>{t("visit_public_profile")}</Link>
         </div>
       )}
 
-      <div className="space-y-6">
+      <form className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">{t("first_name")} <span className='text-red-600'>*</span></label>
@@ -179,7 +205,6 @@ export default function ProfilePage({ user, profile, companies, userCompany }) {
               value={formData.lastName}
               onChange={handleChange}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-              required
             />
           </div>
           <div>
@@ -196,7 +221,7 @@ export default function ProfilePage({ user, profile, companies, userCompany }) {
             />
           </div>
           <div>
-            <label htmlFor="company" className="block text-sm font-medium text-gray-700">{t("company")} <span className='text-red-600'>*</span></label>
+            <label htmlFor="company" className="block text-sm font-medium text-gray-700">{t("company")} <span className='text-red-600'>*</span>{companyError && <span className='text-sm text-red-500'> {companyError}</span>}</label>
             <div className='relative'>
               <div onClick={() => setContentOpen(open => !open)} className="select-none mt-1 block cursor-pointer w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm sm:text-sm">
                 <span className="block truncate">
@@ -210,7 +235,7 @@ export default function ProfilePage({ user, profile, companies, userCompany }) {
                       id="company"
                       name="company"
                       type="text"
-                      placeholder='Search company name'
+                      placeholder={t("search_company_name")}
                       autoComplete="off"
                       value={searchValue}
                       onChange={handleSearchChange}
@@ -223,16 +248,18 @@ export default function ProfilePage({ user, profile, companies, userCompany }) {
                         </button>
                       )
                       : (
-                        <button onClick={() => setCreateCompanyModalOpen(open => !open)} type="button" className='absolute right-2 rounded-md hover:bg-gray-100 p-1'>
-                          <Plus size={20} className='text-indigo-400' />
-                        </button>
+                        <>
+                          {default_company === null && <button onClick={() => setCreateCompanyModalOpen(open => !open)} type="button" className='absolute right-2 rounded-md hover:bg-gray-100 p-1'>
+                            <Plus size={20} className='text-indigo-400' />
+                          </button>}
+                        </>
                       )}
                   </div>
                   <div className='overflow-hidden'>
                     {filteredCompanies.length !== 0
                       ? filteredCompanies.map(company => (
                         <button onClick={() => {
-                          setFormData(prev => ({ ...prev, company: company.id }))
+                          setFormData(prev => ({ ...prev, company: company.id, company_name: company.company_name }))
                           setContentOpen(false);
                           setSearchValue("");
                           setFilteredCompanies([]);
@@ -242,7 +269,22 @@ export default function ProfilePage({ user, profile, companies, userCompany }) {
                           className='text-sm text-left py-2 px-3 block hover:bg-gray-100 w-full'
                         >{company.company_name}</button>
                       ))
-                      : <p className='select-none text-sm text-left py-2 px-3 block w-full'>No company found</p>
+                      : <>
+                        {default_company !== null && <button onClick={() => {
+                          setFormData(prev => ({ ...prev, company: default_company.id, company_name: default_company.company_name }))
+                          setContentOpen(false);
+                          setSearchValue("");
+                          setFilteredCompanies([]);
+                        }}
+                          key={default_company.id}
+                          type="button"
+                          className='text-sm py-2 px-3 block hover:bg-gray-100 w-full text-center'
+                        >{default_company.company_name}
+                          <span className='block text-center text-indigo-500'>{t("asd1")}</span>
+                          <span className='block text-center text-red-500'>{t("asd2")}</span>
+                        </button>}
+                        <p className='select-none text-sm text-left py-2 px-3 block w-full'>{t("no_company_found")}</p>
+                      </>
                     }
                   </div>
                 </div>
@@ -390,12 +432,12 @@ export default function ProfilePage({ user, profile, companies, userCompany }) {
           {profile &&
             <Link href="/" className=" text-black py-2 px-4 underline">{t("back")}</Link>
           }
-          <button type="button" className="bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500" onClick={handleSubmit}>{t("save")}</button>
+          <button type="submit" className="bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500" onClick={handleSubmit}>{t("save")}</button>
         </div>
-      </div>
+      </form>
       {searchModalOpen && <SearchCompanyModal setSearchModalOpen={setSearchModalOpen} />}
       {modalOpen && <ProfileSettingsModal setModalOpen={setModalOpen} profileId={profile.id} privacy_settings={profile.privacy_settings} />}
-      {createCompanyModalOpen && <CreateCompanyModal profileId={profile.id} setCreateCompanyModalOpen={setCreateCompanyModalOpen} userCompany={userCompany} />}
+      {createCompanyModalOpen && <CreateCompanyModal profileId={profile?.id ? profile.id : user.id} setCreateCompanyModalOpen={setCreateCompanyModalOpen} userCompany={userCompany} />}
     </div>
 
   );

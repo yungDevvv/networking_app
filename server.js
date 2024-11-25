@@ -1,37 +1,15 @@
 const express = require('express');
 const next = require('next');
-const mysql = require('mysql2');
-const Hashids = require('hashids/cjs');
 const dev = true;
 const app = next({ dev });
 const handle = app.getRequestHandler();
 const { hashEncodeId, hashDecodeId } = require('./hashId');
-const authenticateToken = require('./utils');
+const { authenticateToken, formatProfile, formatForMySQL } = require('./utils');
+const promisePool = require('./db');
 
 app.prepare().then(() => {
   const server = express();
   server.use(express.json({ limit: '10mb' }));
-
-  const pool = mysql.createPool({
-    host: '127.0.0.1',
-    user: 'nodecode',
-    password: 'PiARrrrXLQRM0fWzEOhv',
-    database: 'nodedb',
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-  });
-
-  const promisePool = pool.promise();
-
-  pool.getConnection((err, connection) => {
-    if (err) {
-      console.error('Error connecting to the database:', err);
-      return;
-    }
-    console.log('Successfully connected to the database');
-    connection.release();
-  });
 
 
   server.get('/profile:hashId', async (req, res) => {
@@ -59,7 +37,13 @@ app.prepare().then(() => {
     const { id } = req.params;
 
     try {
-      const [user] = await promisePool.query(`SELECT * FROM user_profiles WHERE id = ?`, [id]);
+      const [user] = await promisePool.query(`SELECT up.*, 
+              c.company_name, 
+              c.company_logo, 
+              c.id AS company_id 
+        FROM user_profiles up
+        LEFT JOIN Companies c ON up.company = c.id
+        WHERE up.id = ?`, [id]);
 
       if (user.length === 0) return res.status(200).json({ user: null });
       res.status(200).json({ user: user[0] });
@@ -76,7 +60,7 @@ app.prepare().then(() => {
 
     try {
       const settingsJson = JSON.stringify(settings);
-      console.log(settingsJson)
+
       await promisePool.query(
         'UPDATE user_profiles SET privacy_settings = ? WHERE id = ?',
         [settingsJson, profileId]
@@ -94,23 +78,32 @@ app.prepare().then(() => {
 
     try {
       const sql = `
-        SELECT * FROM user_profiles
-        WHERE address1 LIKE ? OR
-              company LIKE ? OR
-              email_address LIKE ? OR
-              first_name LIKE ? OR
-              last_name LIKE ? OR
-              notice LIKE ? OR
-              offering LIKE ? OR
-              phone LIKE ? OR
-              searching LIKE ? OR
-              title LIKE ? OR
-              website LIKE ?
+                SELECT up.*, 
+       c.company_name,
+       c.company_logo
+FROM user_profiles up
+LEFT JOIN Companies c ON up.company = c.id
+WHERE up.address1 LIKE ? OR
+      up.email_address LIKE ? OR
+      up.first_name LIKE ? OR
+      up.last_name LIKE ? OR
+      up.notice LIKE ? OR
+      up.offering LIKE ? OR
+      up.phone LIKE ? OR
+      up.searching LIKE ? OR
+      up.title LIKE ? OR
+      up.website LIKE ? OR
+      c.company_name LIKE ?;
       `;
       const params = Array(11).fill(`%${searchTerm}%`);
 
       const [rows] = await promisePool.query(sql, params);
-      res.status(200).json(rows);
+
+      const profiles = rows.map(item => {
+        return formatProfile(item);
+      })
+
+      res.status(200).json(profiles);
     } catch (error) {
       console.error('Error executing query', error);
       res.status(500).json({ error: 'Internal Server Error' });
@@ -233,10 +226,22 @@ app.prepare().then(() => {
     }
   });
 
-  server.get('/api/get-users', async (req, res) => {
+  server.get('/api/users', async (req, res) => {
     try {
-      const [rows] = await promisePool.query('SELECT * FROM user_profiles')
-      res.status(200).json({ users: rows })
+      const [result] = await promisePool.query(`
+        SELECT up.*, 
+          c.company_name, 
+          c.company_logo, 
+          c.id AS company_id 
+        FROM user_profiles up
+        LEFT JOIN Companies c ON up.company = c.id`);
+
+      const profiles = result.map(item => {
+        return formatProfile(item);
+      })
+
+
+      res.status(200).json({ users: profiles })
     } catch (error) {
       console.error('Error fetching users:', error);
       res.status(500).json({ error: 'Error fetching users' });
@@ -252,17 +257,22 @@ app.prepare().then(() => {
     }
 
     try {
-      const [profile] = await promisePool.query(
-        `SELECT up.*, c.company_name 
-         FROM user_profiles up
-         LEFT JOIN Companies c ON up.company = c.id
-         WHERE up.user_id = ?`,
+      const [result] = await promisePool.query(
+        `SELECT up.*, 
+              c.company_name, 
+              c.company_logo, 
+              c.id AS company_id 
+        FROM user_profiles up
+        LEFT JOIN Companies c ON up.company = c.id
+        WHERE up.user_id = ?`,
         [user_id]
       );
 
 
-      if (profile.length > 0) {
-        return res.status(200).json({ profile: profile });
+
+      if (result.length > 0) {
+        const profile = formatProfile(result[0]);
+        return res.status(200).json({ profile: { ...profile } });
       }
 
       return res.status(200).json({ profile: null });
@@ -375,9 +385,15 @@ app.prepare().then(() => {
 
     try {
       const [members] = await promisePool.query(`
-        SELECT user_profiles.*, NetworkMember.role, NetworkMember.profileId
-        FROM NetworkMember JOIN user_profiles ON NetworkMember.profileId = user_profiles.id 
-        WHERE NetworkMember.networkId = ?
+                  SELECT user_profiles.*, 
+                NetworkMember.role, 
+                NetworkMember.profileId, 
+                Companies.company_name, 
+                Companies.company_logo
+          FROM NetworkMember
+          JOIN user_profiles ON NetworkMember.profileId = user_profiles.id
+          LEFT JOIN Companies ON user_profiles.company = Companies.id
+          WHERE NetworkMember.networkId = ?;
       `, [networkId]);
 
       res.status(200).json({ members });
@@ -387,10 +403,11 @@ app.prepare().then(() => {
     }
   });
 
-  server.post('/api/networks/remove-member', async (req, res) => {
-    const { profileId, memberId, networkId } = req.body;
+  server.delete('/api/networks/:networkId/members/:memberProfileId', authenticateToken, async (req, res) => {
+    const { networkId, memberProfileId } = req.params;
+    const { profileId } = req.user;
 
-    if (!profileId || !memberId || !networkId) {
+    if (!profileId || !memberProfileId || !networkId) {
       return res.status(400).json({ error: 'Profile ID, Member ID, and Network ID are required.' });
     }
 
@@ -405,22 +422,33 @@ app.prepare().then(() => {
         return res.status(403).json({ error: 'You do not have permission to remove members.' });
       }
 
-
       const [memberToRemove] = await promisePool.query(
         'SELECT * FROM NetworkMember WHERE profileId = ? AND networkId = ?',
-        [memberId, networkId]
+        [memberProfileId, networkId]
       );
 
       if (!memberToRemove) {
         return res.status(404).json({ error: 'Member not found in this network.' });
       }
 
-      await promisePool.query('DELETE FROM NetworkMember WHERE profileId = ? AND networkId = ?', [memberId, networkId]);
+      await promisePool.query('DELETE FROM NetworkMember WHERE profileId = ? AND networkId = ?', [memberProfileId, networkId]);
 
-      res.status(200).json({ message: 'Member removed successfully.' });
+      return res.status(200).json({ message: 'Member removed successfully.' });
     } catch (error) {
       console.error('Error removing member:', error);
-      res.status(500).json({ error: 'Internal Server Error.' });
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  server.delete('/api/networks/:networkId/leave', authenticateToken, async (req, res) => {
+    const { networkId } = req.params;
+    const { profileId } = req.user;
+
+    try {
+      await promisePool.query(`DELETE FROM NetworkMember WHERE profileId = ? AND networkId = ?`, [profileId, networkId]);
+      return res.status(200).json({ message: 'You successfully leaved from network!' });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
     }
   });
 
@@ -464,7 +492,7 @@ app.prepare().then(() => {
     `, [profileId]);
 
       if (networks.length === 0) {
-        return res.status(404).json({ message: 'No networks found where the user is an admin' });
+        return res.status(200).json({ networks: [] });
       }
 
       res.status(200).json({ networks });
@@ -484,8 +512,8 @@ app.prepare().then(() => {
     try {
       await promisePool.query(
         `INSERT INTO week_searches (profileId, search_text, start_date, end_date)
-         VALUES (?, ?, ?, ?)`,
-        [profileId, search_text, start_date, end_date]
+          VALUES (?, ?, ?, ?)`,
+        [profileId, search_text, formatForMySQL(start_date), formatForMySQL(end_date)]
       );
 
       res.status(201).json({ message: "Week search successfully created!" });
@@ -495,6 +523,9 @@ app.prepare().then(() => {
   });
 
   server.get('/api/week-searches', async (req, res) => {
+    console.log("SERVER ENDPOINT CHECK")
+    const count = req.query?.count ? req.query.count : false;
+   
     try {
       const [result] = await promisePool.query(`
         SELECT week_searches.*, user_profiles.avatar, user_profiles.first_name, user_profiles.last_name, user_profiles.address1
@@ -502,6 +533,7 @@ app.prepare().then(() => {
         JOIN user_profiles ON week_searches.profileId = user_profiles.id
         WHERE week_searches.is_active = 1
         ORDER BY start_date DESC
+        ${count ? `LIMIT ${count}` : ''}
       `);
       res.status(200).json({ result });
     } catch (err) {
@@ -526,7 +558,7 @@ app.prepare().then(() => {
         queryParams.push(formattedDate);
       }
 
-      query += ` ORDER BY start_date DESC`;
+      query += ` ORDER BY created_at DESC`;
 
       const [result] = await promisePool.query(query, queryParams);
 
@@ -538,31 +570,26 @@ app.prepare().then(() => {
 
   server.delete('/api/week-searches/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
-    const userId = req.userId;
+    const { profileId } = req.user;
 
     try {
-      const [profile] = await promisePool.query(`SELECT id FROM user_profiles WHERE user_id = ?`, [userId])
-
-      if (profile.length === 0) {
-        res.status(404).json({ message: "Profile not found!" })
-      }
-
       const [weekSearch] = await promisePool.query("SELECT * FROM week_searches WHERE id = ?", [id])
 
-      if (weekSearch[0].profileId !== profile[0].id) {
-        res.status(203).json({ message: "You don't have permission to do this!" })
-      } else {
-        await promisePool.query(`DELETE FROM week_searches WHERE id = ?`, [id]);
-        res.status(200).json({ message: 'Week search deleted successfully' });
+      if (weekSearch[0].profileId !== profileId) {
+        return res.status(203).json({ message: "You don't have permission to do this!" })
       }
+
+      await promisePool.query(`DELETE FROM week_searches WHERE id = ?`, [id]);
+      return res.status(200).json({ message: 'Week search deleted successfully' });
+
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: err.message });
     }
   });
 
   server.put('/api/week-searches/:id', async (req, res) => {
     const { id } = req.params;
-    const { search_text, is_active } = req.body;
+    const { search_text, is_active, end_date} = req.body;
 
     if (!search_text) {
       return res.status(400).json({ error: 'Search text is required' });
@@ -579,8 +606,8 @@ app.prepare().then(() => {
       }
 
       await promisePool.query(
-        'UPDATE week_searches SET search_text = ?, is_active = ?, updated_at = NOW() WHERE id = ?',
-        [search_text, is_active, id]
+        'UPDATE week_searches SET search_text = ?, is_active = ?, start_date = NOW(), updated_at = NOW(), end_date = ? WHERE id = ?',
+        [search_text, is_active, formatForMySQL(end_date), id]
       );
 
       res.status(200).json({ message: 'Week search updated successfully' });
@@ -686,7 +713,7 @@ app.prepare().then(() => {
         query += ` AND (${dateCondition})`;
       }
 
-      query += ` ORDER BY week_searches.start_date DESC`;
+      query += ` ORDER BY week_searches.created_at DESC`;
 
       const [rows] = await promisePool.query(query, queryParams);
 
@@ -705,6 +732,7 @@ app.prepare().then(() => {
     const { profileId, company_name } = req.body;
 
     try {
+
       const [existingCompany] = await promisePool.query(
         `SELECT * FROM Companies WHERE profileId = ?`,
         [profileId]
@@ -721,7 +749,7 @@ app.prepare().then(() => {
 
       const companyId = insertResult.insertId;
 
-     
+
       await promisePool.query(
         `UPDATE user_profiles SET company = ? WHERE id = ?`,
         [companyId, profileId]
@@ -735,18 +763,12 @@ app.prepare().then(() => {
   server.put('/api/companies/:companyId', authenticateToken, async (req, res) => {
     const { companyId } = req.params;
     const { company_name, company_logo } = req.body;
-    const userId = req.userId;
+    const { profileId } = req.user;
 
     try {
-      const [profile] = await promisePool.query(`SELECT id FROM user_profiles WHERE user_id = ?`, [userId])
-
-      if (profile.length === 0) {
-        res.status(404).json({ message: "Profile not found!" })
-      }
-
       const [company] = await promisePool.query("SELECT * FROM Companies WHERE id = ?", [companyId])
 
-      if (company[0].profileId !== profile[0].id) {
+      if (company[0].profileId !== profileId) {
         res.status(403).json({ message: "You don't have permission to do this!" })
       }
 
@@ -769,7 +791,7 @@ app.prepare().then(() => {
 
   server.get('/api/companies/:profileId', async (req, res) => {
     const { profileId } = req.params;
-    console.log(profileId, "SERVER :profileId");
+
     try {
       const [userCompany] = await promisePool.query(`SELECT * FROM Companies WHERE profileId = ?`, [profileId]);
 
@@ -785,27 +807,419 @@ app.prepare().then(() => {
 
   server.delete('/api/companies/:companyId', authenticateToken, async (req, res) => {
     const { companyId } = req.params;
-    const userId = req.userId;
+    const { profileId } = req.user;
 
     try {
-      const [profile] = await promisePool.query(`SELECT id FROM user_profiles WHERE user_id = ?`, [userId])
-
-      if (profile.length === 0) {
-        res.status(404).json({ message: "Profile not found!" })
-      }
-
       const [company] = await promisePool.query("SELECT * FROM Companies WHERE id = ?", [companyId])
 
-      if (company[0].profileId !== profile[0].id) {
-        res.status(403).json({ message: "You don't have permission to do this!" })
-      } else {
-        await promisePool.query(`DELETE FROM Companies WHERE id = ?`, [companyId]);
-        res.status(200).json({ message: 'Company deleted successfully' });
+      if (company[0].profileId !== profileId) {
+        return res.status(403).json({ message: "You don't have permission to do this!" })
       }
+
+      await promisePool.query(`DELETE FROM Companies WHERE id = ?`, [companyId]);
+
+      return res.status(200).json({ message: 'Company deleted successfully' });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: err.message });
     }
 
+  });
+
+
+
+
+
+
+
+  server.get("/api/private-groups", async (req, res) => {
+    try {
+      const [rows] = await promisePool.query("SELECT * FROM PrivateGroup");
+      res.status(200).json(rows)
+    } catch (error) {
+      res.status(500).json({ message: "Internal Error: " + error.message })
+    }
+  })
+
+  server.get("/api/private-groups/:privateGroupId", async (req, res) => {
+    const { privateGroupId } = req.params;
+
+    try {
+      const [group] = await promisePool.query("SELECT * FROM PrivateGroup WHERE id = ?", [privateGroupId]);
+      res.status(200).json({ group })
+    } catch (error) {
+      res.status(500).json({ message: "Internal Error: " + error.message })
+    }
+  })
+
+  server.get("/api/private-groups/:privateGroupId/members", async (req, res) => {
+    const { privateGroupId } = req.params;
+
+    try {
+      const [members] = await promisePool.query(`
+        SELECT user_profiles.*, 
+                PrivateGroupMember.role, 
+                PrivateGroupMember.profileId, 
+                Companies.company_name, 
+                Companies.company_logo
+          FROM PrivateGroupMember
+          JOIN user_profiles ON PrivateGroupMember.profileId = user_profiles.id
+          LEFT JOIN Companies ON user_profiles.company = Companies.id
+          WHERE PrivateGroupMember.privateGroupId = ?;`, [privateGroupId]);
+
+      return res.status(200).json({ members })
+    } catch (error) {
+      return res.status(500).json({ message: "Internal Error: " + error.message })
+    }
+  })
+
+  server.post("/api/private-groups", authenticateToken, async (req, res) => {
+    const { title, description } = req.body;
+    const { profileId } = req.user;
+
+    try {
+      const [insertResult] = await promisePool.query(
+        `INSERT INTO PrivateGroup (profileId, title, description, founder) VALUES (?, ?, ?, ?)`,
+        [profileId, title, description, profileId]
+      );
+
+      const privateGroupId = insertResult.insertId;
+
+      await promisePool.query(`
+      INSERT INTO PrivateGroupMember (role, profileId, privateGroupId)
+      VALUES ('ADMIN', ?, ?)
+    `, [profileId, privateGroupId]);
+
+      res.status(201).json({ message: 'Network created successfully', privateGroupId });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Error then creating network', error });
+    }
+  })
+
+  server.put('/api/private-groups/:privateGroupId', authenticateToken, async (req, res) => {
+    const { privateGroupId } = req.params;
+    const { title, description } = req.body;
+    const { profileId } = req.user;
+
+    if (!profileId || !privateGroupId) {
+      return res.status(400).json({ error: 'Profile ID, Group ID are required.' });
+    }
+
+    try {
+      const [adminCheck] = await promisePool.query(
+        'SELECT role FROM PrivateGroupMember WHERE profileId = ? AND privateGroupId = ?',
+        [profileId, privateGroupId]
+      );
+
+      if (!adminCheck || adminCheck[0].role !== 'ADMIN') {
+        return res.status(403).json({ error: 'You do not have permission to remove members.' });
+      }
+
+      await promisePool.query('UPDATE PrivateGroup SET title = ?, description = ? WHERE id = ?', [title, description, privateGroupId]);
+
+      return res.status(200).json({ message: 'Group edited successfully' });
+
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  })
+
+  server.delete('/api/private-groups/:privateGroupId', authenticateToken, async (req, res) => {
+    const { privateGroupId } = req.params;
+    const { profileId } = req.user;
+
+    if (!profileId || !privateGroupId) {
+      return res.status(400).json({ error: 'Profile ID, Group ID are required.' });
+    }
+
+    try {
+      const [group] = await promisePool.query(
+        'SELECT founder FROM PrivateGroup WHERE id = ?',
+        [privateGroupId]
+      );
+
+      if (group[0].founder !== profileId) {
+        return res.status(403).json({ error: 'You do not have permission to delete this group.' });
+      }
+
+      await promisePool.query('DELETE FROM PrivateGroup WHERE id = ?', [privateGroupId]);
+
+      return res.status(200).json({ message: 'Group deleted successfully' });
+
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  })
+
+  server.get('/api/private-groups/admin/:id', authenticateToken, async (req, res) => {
+    const { profileId } = req.user;
+
+    try {
+      const [groups] = await promisePool.query(`
+        SELECT pg.* 
+        FROM PrivateGroup pg
+        INNER JOIN PrivateGroupMember pgm ON pg.id = pgm.privateGroupId
+        WHERE pgm.profileId = ? AND pgm.role = 'ADMIN'
+      `, [profileId]);
+
+      return res.status(200).json(groups);
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  })
+
+  server.get('/api/private-groups/user/:id', authenticateToken, async (req, res) => {
+    const { profileId } = req.user;
+
+    try {
+      const [groups] = await promisePool.query(`
+        SELECT pg.* 
+        FROM PrivateGroup pg
+        INNER JOIN PrivateGroupMember pgm ON pg.id = pgm.privateGroupId
+        WHERE pgm.profileId = ?
+      `, [profileId]);
+
+      return res.status(200).json({ groups });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  })
+
+  server.get('/api/private-groups/:privateGroupId/access', authenticateToken, async (req, res) => {
+    const { profileId } = req.user;
+    const { privateGroupId } = req.params;
+
+    try {
+      const [rows] = await promisePool.execute(
+        `SELECT COUNT(*) AS member_count 
+           FROM PrivateGroupMember 
+           WHERE profileId = ? AND privateGroupId = ?`,
+        [profileId, privateGroupId]
+      );
+
+      const memberCount = rows[0].member_count;
+
+      if (memberCount > 0) {
+        res.json({ access: true });
+      } else {
+        res.json({ access: false });
+      }
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal Server Error', err });
+    }
+  })
+
+  server.delete('/api/private-groups/:privateGroupId/members/:memberProfileId', authenticateToken, async (req, res) => {
+    const { privateGroupId, memberProfileId } = req.params;
+    const { profileId } = req.user;
+
+    if (!profileId || !memberProfileId || !privateGroupId) {
+      return res.status(400).json({ error: 'Profile ID, Member ID, and Network ID are required.' });
+    }
+
+    try {
+
+      const [adminCheck] = await promisePool.query(
+        'SELECT role FROM PrivateGroupMember WHERE profileId = ? AND privateGroupId = ?',
+        [profileId, privateGroupId]
+      );
+
+      if (!adminCheck || adminCheck[0].role !== 'ADMIN') {
+        return res.status(403).json({ error: 'You do not have permission to remove members.' });
+      }
+
+      const [memberToRemove] = await promisePool.query(
+        'SELECT * FROM PrivateGroupMember WHERE profileId = ? AND privateGroupId = ?',
+        [memberProfileId, privateGroupId]
+      );
+
+      if (!memberToRemove) {
+        return res.status(404).json({ error: 'Member not found in this group.' });
+      }
+
+      await promisePool.query('DELETE FROM PrivateGroupMember WHERE profileId = ? AND privateGroupId = ?', [memberProfileId, privateGroupId]);
+
+      return res.status(200).json({ message: 'Member removed successfully.' });
+    } catch (error) {
+      console.error('Error removing member:', error);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+  })
+
+  server.put('/api/private-groups/:privateGroupId/members/:memberProfileId/role', authenticateToken, async (req, res) => {
+    const { privateGroupId, memberProfileId } = req.params;
+    const { currentRole } = req.body;
+    const { profileId } = req.user;
+
+    if (!privateGroupId || !memberProfileId || !currentRole) {
+      return res.status(400).json({ error: 'Private Group ID, Profile ID, current role, and new role are required.' });
+    }
+
+    const newRole = currentRole === "GUEST" ? "ADMIN" : "GUEST"
+
+
+    try {
+      const [founderCheck] = await promisePool.query(
+        'SELECT founder FROM PrivateGroup WHERE id = ?',
+        [privateGroupId]
+      );
+
+      if (!founderCheck || founderCheck.length === 0) {
+        return res.status(404).json({ error: 'Group not found.' });
+      }
+
+      const founderProfileId = founderCheck[0].founder;
+
+      if (memberProfileId === founderProfileId) {
+        return res.status(403).json({ error: 'Cannot change the role of the group founder.' });
+      }
+
+      const [adminCheck] = await promisePool.query(
+        'SELECT role FROM PrivateGroupMember WHERE profileId = ? AND privateGroupId = ?',
+        [profileId, privateGroupId]
+      );
+
+      if (!adminCheck || adminCheck[0].role !== 'ADMIN') {
+        return res.status(403).json({ error: 'You do not have permission to change roles.' });
+      }
+
+      await promisePool.query(
+        'UPDATE PrivateGroupMember SET role = ? WHERE profileId = ? AND privateGroupId = ?',
+        [newRole, memberProfileId, privateGroupId]
+      );
+
+      return res.status(200).json({ message: 'User role updated successfully.' });
+
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  server.delete('/api/private-groups/:privateGroupId/leave', authenticateToken, async (req, res) => {
+    const { privateGroupId } = req.params;
+    const { profileId } = req.user;
+
+    try {
+      const [adminCheck] = await promisePool.query(
+        'SELECT role FROM PrivateGroupMember WHERE profileId = ? AND privateGroupId = ?',
+        [profileId, privateGroupId]
+      );
+
+      if (!adminCheck || adminCheck[0].role !== 'ADMIN') {
+        return res.status(403).json({ error: 'You do not have permission to leave.' });
+      }
+
+      await promisePool.query(`DELETE FROM PrivateGroupMember WHERE profileId = ? AND privateGroupId = ?`, [profileId, privateGroupId]);
+
+      return res.status(200).json({ message: 'You successfully leaved from group!' });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+
+
+
+
+
+  server.post('/api/invite', authenticateToken, async (req, res) => {
+    const { recipientId, groupId } = req.body;
+    const { first_name, last_name, profileId } = req.user;
+    if (!recipientId || !groupId) {
+      return res.status(400).json({ error: 'Не указаны все параметры' });
+    }
+
+    try {
+      const inviteLink = `https://nodetest.crossmedia.fi/api/join/${groupId}?profileId=${recipientId}`;
+
+
+      const [result] = await promisePool.query(
+        `INSERT INTO Notifications (recipientId, senderId, privateGroupId, inviteLink, message)
+       VALUES (?, ?, ?, ?, ?)`,
+        [recipientId, profileId, groupId, inviteLink, `${first_name} ${last_name} is invited you to private group!`]
+      );
+      res.status(200).json({ message: 'Приглашение отправлено' });
+    } catch (err) {
+      console.error('Ошибка при создании уведомления:', err);
+      res.status(500).json({ error: 'Ошибка сервера' });
+    }
+  });
+
+
+  server.get('/api/notifications/:recipientId', async (req, res) => {
+    const { recipientId } = req.params;
+
+    try {
+      const [notifications] = await promisePool.query(
+        `SELECT * FROM Notifications WHERE recipientId = ? AND isRead = 0 ORDER BY created_at DESC`,
+        [recipientId]
+      );
+
+      res.status(200).json(notifications);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Error while getting notifications' });
+    }
+  });
+
+
+  server.patch('/api/notifications/:id/read', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+      await promisePool.query('UPDATE Notifications SET isRead = TRUE WHERE id = ?', [id]);
+      res.status(200).json({ message: 'Notification marked as read' });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Error updating notification status' });
+    }
+  });
+
+
+  server.get('/api/join/:groupId', async (req, res) => {
+    const { groupId } = req.params;
+    const { profileId } = req.query;
+
+    if (!groupId || !profileId) {
+      return res.status(400).json({ error: 'No groupId or Profile Id provided' });
+    }
+
+    try {
+      const [groupResult] = await promisePool.query(
+        `SELECT * FROM PrivateGroup WHERE id = ?`,
+        [groupId]
+      );
+
+      if (groupResult.length === 0) {
+        return res.status(404).json({ error: 'Group not found' });
+      }
+
+      const [memberCheck] = await promisePool.query(
+        `SELECT * FROM PrivateGroupMember WHERE profileId = ? AND privateGroupId = ?`,
+        [profileId, groupId]
+      );
+
+      if (memberCheck.length > 0) {
+        return res.redirect(302, '/?alreadyIn=true');
+      }
+
+
+      await promisePool.query(
+        `INSERT INTO PrivateGroupMember (profileId, privateGroupId, role) 
+       VALUES (?, ?, 'GUEST')`,
+        [profileId, groupId]
+      );
+
+
+      res.redirect('/private-group/' + groupId);
+
+    } catch (err) {
+      console.error('Ошибка при присоединении к группе:', err);
+      res.status(500).json({ error: 'Ошибка сервера' });
+    }
   });
 
   server.all('*', (req, res) => {

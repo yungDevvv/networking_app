@@ -6,14 +6,18 @@ import { hashEncodeId } from '../../hashId';
 import MemberCardWeekSearch from './MemberCardWeekSearchItem';
 import { useModal } from "../context/ModalProvider";
 import { useRouter } from "next/router";
+import ChooseGroupModal from './modals/choose-group-modal';
+import { useTranslation } from 'next-i18next';
 
 const ContactCard = ({ member, searchTerm }) => {
-   
+   const { t } = useTranslation('common');
    const [isMenuOpen, setIsMenuOpen] = useState(false);
+   const [chooseGroupModalOpen, setChooseGroupModalOpen] = useState(false);
    const [contentOpen, setContentOpen] = useState(1)
+
    const handleMenuToggle = () => setIsMenuOpen(!isMenuOpen);
 
-   const {openModal} = useModal();
+   const { openModal } = useModal();
    const router = useRouter();
 
    const handleAddToNetwork = (profileId) => {
@@ -35,7 +39,8 @@ const ContactCard = ({ member, searchTerm }) => {
    const businessNetworks = member?.businessNetworks
       ? companiesList.filter(el => el.name === member.businessNetworks.find(bns => bns === el.name))
       : [];
-   
+
+
    return (
       <div className={`bg-white shadow-md rounded-lg p-4 border border-gray-100 relative`}>
 
@@ -53,16 +58,19 @@ const ContactCard = ({ member, searchTerm }) => {
             {isMenuOpen && (
                <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg text-left">
                   <ul className="py-1">
-                     <li> 
-                        <a href={`/profile/` + hashEncodeId(member.id)} className="block px-4 py-2 text-gray-800 hover:bg-gray-100">Profile</a>
-                     </li>
-                     <li> 
-                        <button onClick={() => handleAddToNetwork(member.id)} className="block px-4 py-2 text-gray-800 hover:bg-gray-100 w-full text-left">Add to network</button>
-                     </li>
-                     {/* <li>
-                        <a href="#" className="block px-4 py-2 text-gray-800 hover:bg-gray-100">Kick</a>
+                     <li>
+                        <a href={`/profile/` + hashEncodeId(member.id)} className="block underline px-4 py-2 text-indigo-500 hover:text-indigo-700 hover:bg-gray-100">{t("visit_profile")}</a>
                      </li>
                      <li>
+                        <button onClick={() => handleAddToNetwork(member.id)} className="block px-4 py-2 text-gray-800 hover:bg-gray-100 w-full text-left">{t("invite_network")}</button>
+                     </li>
+                     <li>
+                        <button onClick={() => {
+                           setChooseGroupModalOpen(true)
+                           router.replace(`?profileId=${member.id}`);
+                        }} className="block px-4 py-2 text-gray-800 hover:bg-gray-100 w-full text-left">{t("invite_group")}</button>
+                     </li>
+                     {/* <li>
                         <a href="#" className="block px-4 py-2 text-gray-800 hover:bg-gray-100">Change Role</a>
                      </li>
                      <li>
@@ -81,8 +89,8 @@ const ContactCard = ({ member, searchTerm }) => {
             </div>
             <div>
                <h2 className="text-md font-semibold">{highlightText(member.first_name)} {highlightText(member.last_name)}{member.role === "ADMIN" && <span className='font-normal text-red-500'> (ADMIN)</span>}</h2>
-               <p className='text-indigo-500'>{member.title}</p>
-               <p>{highlightText(member.company)}</p>
+               <p className='text-indigo-500'>{member.title} </p>
+               <p>{highlightText(member.company?.company_name)}</p>
             </div>
             <div className='ml-auto'>
                {
@@ -90,6 +98,9 @@ const ContactCard = ({ member, searchTerm }) => {
                   businessNetworks.map((el, i) => <img key={i} className='w-[20px] h-[20px]' src={el.image} alt="network_logo" title={el.name} />)
                }
             </div>
+         </div>
+         <div className='w-24 h-[50px] mt-1'>
+            {member?.company?.company_logo && <img className='w-full h-full object-contain' src={member.company.company_logo} alt="company logo" />}
          </div>
          <hr className='my-5' />
          <div className="flex items-start justify-center flex-col min-h-[150px]">
@@ -154,7 +165,7 @@ const ContactCard = ({ member, searchTerm }) => {
                // <MemberCardWeekSearch profileId={member.profileId} />
                <MemberCardWeekSearch profileId={member.id} />
             )}
-            
+
 
          </div>
          <hr className='my-5' />
@@ -164,7 +175,7 @@ const ContactCard = ({ member, searchTerm }) => {
             <button onClick={() => setContentOpen(3)} className={'bg-indigo-100 px-4 py-2 rounded hover:bg-indigo-200 text-indigo-700 transition-all duration-150 ' + `${contentOpen === 3 && "!text-gray-200 bg-indigo-500 hover:text-gray-200 hover:bg-indigo-500"}`}><Search /></button>
          </div>
 
-         
+         {chooseGroupModalOpen && <ChooseGroupModal setChooseGroupModalOpen={setChooseGroupModalOpen} />}
       </div>
    );
 };
